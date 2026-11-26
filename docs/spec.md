@@ -59,8 +59,8 @@ A local ASP.NET Core Web API that turns a short request ("mossy stone door") plu
 Every endpoint that spends money or touches files must be safe from other devices, from web pages open in the owner's browser, and from DNS rebinding. Origin checks alone are not enough. A rebound page counts as same-origin, and requests with no body or a simple body skip the CORS preflight. So the API uses these layers, all applied before any endpoint, model call or data access:
 
 1. **Loopback only.** Kestrel listens on `localhost` only. Requests whose remote address is not loopback are refused, so other devices cannot connect (AC-14.1, AC-14.2).
-2. **Host allowlist.** Only `localhost` and `127.0.0.1` are accepted as hosts, through ASP.NET Core host filtering (`AllowedHosts` is `localhost;127.0.0.1`). Any other host is refused with 400. A DNS-rebinding page sends its own host name (for example `evil.example`), so it is refused here (AC-14.3). The app does not start if `AllowedHosts` is `*`.
-3. **API token.** Every `/api` request must carry `Authorization: Bearer <token>`. The token is a random value of at least 32 characters that the owner sets in user-secrets (`Security:ApiToken`), and the app does not start without it. A web page cannot know it. It is also a non-simple header, so a browser must send a CORS preflight first. The API answers no CORS requests, so the preflight fails. The token is compared in constant time and never logged. In Scalar, the owner enters it once in the authentication panel.
+2. **Host allowlist.** Only `localhost` and `127.0.0.1` are accepted as hosts, through ASP.NET Core host filtering (`AllowedHosts` is `localhost;127.0.0.1`). Any other host is refused with 400. A DNS-rebinding page sends its own host name (for example `evil.example`), so it is refused here (AC-14.3). The app does not start if `AllowedHosts` lists anything else.
+3. **API token.** Every request except `/`, `/openapi/*` and `/scalar/*` must carry `Authorization: Bearer <token>`. The token is a random value of at least 32 characters that the owner sets in user-secrets (`Security:ApiToken`), and the app does not start without it. A web page cannot know it. It is also a non-simple header, so a browser must send a CORS preflight first. The API answers no CORS requests, so the preflight fails. The token is compared in constant time and never logged. In Scalar, the owner enters it once in the authentication panel.
 4. **Cross-site refusal.** State-changing requests from another origin are refused. They are checked with `Origin`, which must be absent or the app's own origin, and with `Sec-Fetch-Site`, where `cross-site` and `same-site` are refused. The `same-site` case covers another local app on a different port. This is defence in depth on top of 2 and 3.
 5. **JSON bodies only.** Every POST and PUT needs a JSON body with `Content-Type: application/json`, even where the body is just `{}`, for example on approve. A missing body or any other content type is refused with 415. Browsers cannot send such a request cross-origin without a CORS preflight, and the preflight fails.
 6. **Unguessable IDs.** Projects, requests, images and exports use GUIDs (`Guid.CreateVersion7()`), not sequential integers.
@@ -107,6 +107,8 @@ All paths are under `/api` and need the token from §5. Every POST and PUT sends
 Each step comes as its own small pull request with tests, after this plan is approved.
 
 ## 8. Decisions
+
+Each decision, with its context and the options weighed, is recorded in [docs/adr](adr/README.md).
 
 Confirmed by the project owner on 2026-11-26:
 
