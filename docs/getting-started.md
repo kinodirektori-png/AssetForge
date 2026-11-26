@@ -23,9 +23,9 @@ The app does not start without it.
 dotnet run --project src/AssetForge.Api
 ```
 
-It listens on http://localhost:5062 only and opens the Scalar UI at `/scalar/v1`. In Scalar, open the authentication
+It listens on http://localhost:5062 only (set `Server:Port` to use another port) and opens the Scalar UI at `/scalar/v1`. In Scalar, open the authentication
 setting and paste the token once. `GET /api/status` checks that everything works. Every POST and PUT needs a JSON body,
-`{}` where nothing else is needed.
+`{}` where nothing else is needed, and any request body must be `application/json`.
 
 ## Where data is kept
 
