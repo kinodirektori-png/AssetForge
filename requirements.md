@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Draft v0.2 for review |
+| **Status** | Draft v0.3 for review |
 | **Owner** | Project owner |
 | **Date** | 2026-11-26 |
-| **Previous version** | v0.1 (2026-11-26). Changes are listed in [§15](#15-change-log). |
+| **Previous version** | v0.2 (2026-11-26). Changes are listed in [§15](#15-change-log). |
 | **Scope of this document** | *What* the system must do and *how well*. *How* it is built (architecture, components, storage technology) is decided in a later step. |
 
 Requirement keywords: **Must** = required for v1, **Should** = wanted for v1 but can slip, **Could** = nice-to-have, **Later** = not in v1.
@@ -26,7 +26,7 @@ Asset Forge is a small single-user app that runs on the owner's computer. It kee
 
 ### 3.1 Goals
 
-- **G1 Consistency.** Images generated for one project share the same style, perspective and palette without the user rewriting prompts. Whether this is achievable is checked in Phase 0 ([§12](#12-release-scope)) before the product is built.
+- **G1 Consistency.** Images generated for one project share the same style, perspective and palette without the user rewriting prompts. Whether this is achievable is checked in the Phase 0 spike ([§12](#12-release-scope)) before design starts.
 - **G2 Speed.** Going from a short request to an approved, exported image is fast (target in [§11](#11-success-metrics)).
 - **G3 Low effort.** The user types a short request; the system supplies the detail from the style guide and asset-type rules.
 - **G4 Control.** The user decides which images are used; nothing is exported without approval.
@@ -162,9 +162,9 @@ The user must be able to submit a short request (free text plus asset type). The
 - **Fixed part:** built by a template from every filled style guide field and the asset-type preset. The same inputs always give the same fixed part. The template has a version.
 - **Subject part:** written by the text model (D-2) from the request text.
 
-The things-to-avoid list is sent as a negative prompt where the model supports one. MAI-Image documents no negative-prompt parameter (Appendix A), so for now the list is included in the prompt, and Phase 0 measures whether that helps or hurts ([§12](#12-release-scope)).
+The things-to-avoid list is sent as a negative prompt where the model supports one. Neither MAI-Image nor the FLUX models in Foundry document a negative-prompt parameter (Appendices A and B), so for now the list is included in the prompt, and Phase 0 measures whether that helps or hurts ([§12](#12-release-scope)).
 
-The expanded prompt must be shown to the user before generation and must be editable. Its length is shown while editing and must not exceed the image model's limit (32,000 tokens for MAI-Image). The final prompt actually sent must be saved with every image, together with the original expansion and a flag saying whether the user edited it.
+The expanded prompt must be shown to the user before generation and must be editable. Its length is shown while editing and must not exceed the image model's limit (for example 5,000 tokens for FLUX1.1 [pro], 32,000 for FLUX.2 [pro]; Appendix B). The final prompt actually sent must be saved with every image, together with the original expansion and a flag saying whether the user edited it.
 
 - **AC-5.1** Given a project with a complete style guide and the request "mossy stone door" of type *prop*, when the user asks for expansion, then the shown prompt contains the request and, word for word, the style guide's description, perspective, palette, lighting, outline and detail values, its things-to-avoid terms (unless sent as a negative prompt), and the prop preset rules. Empty optional fields leave no placeholder text.
 - **AC-5.2** Given the same request and the same style guide version, when the user expands it twice, then the fixed part is identical both times.
@@ -184,7 +184,7 @@ For each round the system must generate 4 variants using the Azure-hosted image 
 - Every call that may have been billed is recorded in spend (FR-11), and any image it returns is stored, even if it arrives after the variant was marked failed.
 - Calls refused by the model's content filter are reported as their own error type, not as a general failure.
 - Props and icons must be delivered with a transparent background: from the model's own transparency output where available, otherwise by background removal (DEC-3, NFR-9). *Transparent background* means: every pixel in the outer 2 % of the canvas on each side has alpha 0, and the image has at least one fully opaque pixel.
-- Whether the style guide reference images are sent to the model with each generation is decided in Phase 0 (OQ-12). With MAI-Image, sending them means using the image-edit endpoint, which takes up to 5 JPEG or PNG images (Appendix A). If they are sent, which ones were sent is recorded (FR-10).
+- Whether the style guide reference images are sent to the model with each generation is decided in Phase 0 (OQ-12). Whether and how many can be sent depends on the model: for example up to 8 for FLUX.2 [pro], none for FLUX1.1 [pro] (Appendix B). If they are sent, which ones were sent is recorded (FR-10).
 
 - **AC-6.1** Given an approved prompt and enough budget, when the user generates, then 4 variants appear for review with status *Pending review*.
 - **AC-6.2** Given a request of type *prop* or *icon*, when variants are generated, then each delivered PNG has a transparent background as defined above.
@@ -357,14 +357,14 @@ Each model call should be logged with time, project, model, duration, outcome an
 |---|---|---|---|
 | NFR-1 | Consistency | Variants follow the style guide without manual prompt editing. | Provisional: ≥ 3 of 4 variants marked on-style for unedited prompts (SM-1). Final target set from Phase 0 results. |
 | NFR-2 | Responsiveness | System steps are fast enough for the < 5 min goal (SM-2). | Expansion p95 ≤ 10 s. A round of 4 variants p95 ≤ 90 s (provisional until Phase 0, OQ-15). Export of up to 20 images ≤ 10 s. A gallery page loads in ≤ 2 s with one year of images stored at the NFR-10 volume (about 65,000). |
-| NFR-3 | Cost | Asset Forge's own spending is capped. If the app's control fails or a credential leaks, the overspend is limited and the owner is told. | Committed spend ≤ cap at all times (FR-11). Outside the app: (a) key authentication is disabled on the Azure model resource, if Azure allows it (OQ-27), so only the owner's Azure sign-in can call it; (b) the image deployment's rate quota is set to the lowest value that still meets NFR-2 (this limits speed only: even the lowest documented quota allows about 259,000 images a month); (c) an Azure budget at the cap alerts the owner and runs an action that disables the model deployments. Azure budgets only alert by themselves, and cost data reaches Azure hours late, so these limit overspend rather than prevent it: the worst case is about quota rate × reporting delay × price per image, recorded as an accepted risk once Phase 0 measures it (OQ-27). Recorded spend is within 5 % of the Azure-billed cost (SM-3). |
+| NFR-3 | Cost | Asset Forge's own spending is capped. If the app's control fails or a credential leaks, the overspend is limited and the owner is told. | Committed spend ≤ cap at all times (FR-11). Outside the app: (a) key authentication is disabled on the Azure model resource, if Azure allows it (OQ-27), so only the owner's Azure sign-in can call it; (b) the image deployment's rate quota is set to the lowest value that still meets NFR-2 (this limits speed only: even the lowest documented quota, 6 requests per minute, allows about 259,000 images a month); (c) an Azure budget at the cap alerts the owner and runs an action that disables the model deployments. Azure budgets only alert by themselves, and cost data reaches Azure hours late, so these limit overspend rather than prevent it: the worst case is about quota rate × reporting delay × price per image, recorded as an accepted risk once Phase 0 measures it (OQ-27). Recorded spend is within 5 % of the Azure-billed cost (SM-3). |
 | NFR-4 | Traceability | Every image can be traced to how it was made. | 100 % of stored images have all FR-10 fields that apply to them. |
 | NFR-5 | Secrets | Azure credentials are never exposed. | Credentials do not appear in the repository, the user interface or anything sent to it, logs, stored metadata or error messages. Asset Forge uses the owner's own Azure sign-in where possible; any key that is needed is kept in the operating system's protected credential store, never in a plain-text config file, and can be rotated without a code change. The identity used can only call the models Asset Forge needs. Secret scanning is enabled on the repository. |
 | NFR-6 | Confidentiality | Stored images, prompts and metadata are private. | Nothing is reachable from other devices or other websites (FR-14). Stored files live in the owner's user profile or a folder they choose. |
 | NFR-7 | Data safety | Stored images and history are not lost. | No loss across restarts, crashes or app updates. A daily backup to a second location (another drive or cloud storage) limits data loss from a disk failure to at most 24 h. One restore is tested before the v1 release. |
 | NFR-8 | Resilience | Model errors and interruptions don't lose work or money. | A failed or interrupted generation leaves the request, prompt and completed variants intact and retryable; a generation continues when the user closes the window, and is shown as interrupted after a shutdown or crash (FR-6). |
 | NFR-9 | Portability of model | The image model can be replaced later without changing the user workflow. | Replacing the model requires no change to FR-1 to FR-16 behaviour. Model-specific limits (sizes, prompt length, negative prompt, reference images, native transparency, prices) are configuration, not code. Transparency falls back to background removal. |
-| NFR-10 | Volume | Handles the expected load. | Up to 300 requests per week (about 1,200 variants per week, about 5,200 per month). Storage for raw and processed images up to 200 GB in the first year. Provisional: the spend at this volume must fit the cap, which Phase 0 checks (§12). |
+| NFR-10 | Volume | Handles the expected load. | Up to 300 requests per week (about 1,200 variants per week, about 5,200 per month). Storage for raw and processed images up to 200 GB in the first year. Provisional: at list prices this volume does **not** fit the €100 cap with any FLUX model (see [§12 cost estimate](#cost-estimate)); Phase 0 confirms the real cost and the owner then lowers the volume or raises the cap (OQ-29). |
 | NFR-11 | Upload safety | Uploaded files cannot harm the system. | Uploads are checked before processing (FR-2); oversized files are refused without being fully decoded; stored copies have metadata removed. |
 
 ## 8. Constraints
@@ -373,7 +373,7 @@ Each model call should be logged with time, project, model, duration, outcome an
 |---|---|---|
 | C-1 | Codebase in **.NET**. | Project owner, 2026-11-26 |
 | C-2 | Runs as a **local app on the owner's computer** (DEC-1). Replaces GitHub Pages hosting from v0.1, which serves static files only and could not meet FR-10, FR-11, FR-14 or NFR-5. | Project owner, 2026-11-26; changed in v0.2 |
-| C-3 | Images generated by an **Azure-hosted image model**; gpt-image is not in the available Foundry model list, so **MAI-Image** models are the candidates (see [Appendix A](#appendix-a-mai-image-model-evaluation)). Model choice and use of preview models: DEC-3. | Project owner, 2026-11-26 |
+| C-3 | Images generated by an **Azure-hosted image model**. gpt-image is not in the available Foundry model list, and MAI-Image models are not available in the owner's Azure region (Spain Central), so the Phase 0 spike uses **FLUX** models ([Appendix B](#appendix-b-flux-model-evaluation)). The final model is chosen in the design document after the spike (DEC-9). | Project owner, 2026-11-26; changed in v0.3 |
 | C-4 | Monthly generation budget **€100**, one cap across all projects (DEC-2). | Project owner, 2026-11-26 |
 | C-5 | Single user; access restricted to the owner (FR-14). Replaces "no logins" from v0.1. | Changed in v0.2 |
 | C-6 | Output is used in a **Unity** project. | Problem statement |
@@ -382,12 +382,13 @@ Each model call should be logged with time, project, model, duration, outcome an
 
 | ID | Dependency | Needed for |
 |---|---|---|
-| D-1 | Azure subscription with a Microsoft Foundry deployment of a MAI-Image model. | FR-6 |
+| D-1 | Azure subscription with a Microsoft Foundry Global Standard deployment of the image model (FLUX for the spike). | FR-6, §12 |
 | D-2 | A text model for prompt expansion (which one is open, OQ-8). | FR-5, FR-7 |
 | D-4 | GitHub repository for the source code. | C-1 |
 | D-5 | Azure pricing for the chosen models, to compute cost per call. | FR-11 |
 | D-6 | A background removal capability, used when the model gives no transparency. | FR-6, FR-12 |
 | D-7 | Azure deployment rate quotas, key authentication disabled on the model resource, and a Cost Management budget whose action disables the deployments. | NFR-3 |
+
 ## 10. Assumptions
 
 | ID | Assumption |
@@ -397,7 +398,7 @@ Each model call should be logged with time, project, model, duration, outcome an
 | A-3 | The game's art is stylised 2D (painterly or clean cartoon), not strict pixel art. |
 | A-4 | Images are for a game intended to ship, so provenance (model and settings) is recorded per image. Stores may require disclosure of AI-generated content (for example Steam). |
 | A-5 | Volume is tens to a few hundred requests per week, each producing up to 4 variants. |
-| A-7 | Generating above the asset's target size and downscaling is acceptable (MAI-Image minimum output is 768 × 768). |
+| A-7 | Generating at a size the model supports and then resizing is acceptable. Small assets (256 px icons, 512 px props) are generated larger and downscaled. |
 | A-8 | A templated prompt, possibly with reference images, gives consistent enough style. Unproven until Phase 0. |
 | A-9 | The owner has the right to use the reference images they upload. |
 
@@ -411,15 +412,58 @@ Each model call should be logged with time, project, model, duration, outcome an
 
 ## 12. Release scope
 
-### Phase 0 – validation (before design sign-off)
+### Phase 0 – one-day spike (before design)
 
-A throwaway spike, not part of v1, to test the main assumption (A-8) before building:
+A throwaway prototype built in one day, not part of v1, to test the main assumption (A-8) and measure cost before design starts (DEC-9). It is the thin version of the core loop: style guide → prompt → 4 variants → approve → PNG in a folder.
 
-- 20 requests (5 per asset type) × 4 variants, in two setups: (a) fixed-template prompt only; (b) template plus style guide reference images.
-- Candidate models: MAI-Image-2.6 and MAI-Image-2.6-Flash, both with background removal (GA models only, DEC-3).
-- Measure: on-style rate, transparency and edge quality, tile seams, actual cost per image, latency, whether the things-to-avoid list helps, negative prompt support, prompt length limit, content filter behaviour and billing, seed support.
-- Expected cost: well under €20.
-- **Exit criteria:** at least one setup reaches ≥ 3 of 4 on-style, **and** that setup's measured cost per variant × expected monthly volume fits under the cap. Cost per variant includes its share of text-model calls and any reference-image input. At the NFR-10 volume (about 5,200 variants a month), €100 allows under €0.02 per variant. If the cost doesn't fit, lower A-5 and NFR-10 to what the cap affords, or raise the cap. Results set NFR-1, pick between the two models and answer OQ-6, OQ-8, OQ-12, OQ-15, OQ-23, OQ-24, OQ-26 and OQ-27. If no setup reaches the target, revisit the product before building it.
+**In the spike (thin versions):**
+
+| FR | Spike version |
+|---|---|
+| FR-2 | One style guide in a file; no limits checked; reference images only for setup (b). |
+| FR-4 | Fixed preset text per asset type. |
+| FR-5 | Template only, no text model; prompt shown and editable before sending. |
+| FR-6 | 4 variants per request; errors shown; no retries, no background running, no crash recovery. |
+| FR-9 | Approve or reject the variants of the current request, and mark them on-style. |
+| FR-10 | A JSON file next to each image with prompt, model, settings, seed and cost. |
+| FR-11 | Hard cap of 300 billed images in the spike, plus an Azure budget alert at €25. |
+| FR-12a | Resize only. No background removal, so props and icons are judged on shape and style only. |
+| FR-13 | Approved images saved as PNGs to one fixed folder. |
+| FR-14 | Listens on the local computer only; Microsoft Entra ID sign-in, no API key. |
+
+Everything else (FR-1, FR-3, FR-7, FR-8, the rest of FR-10 to FR-12, FR-15, FR-16, NFR-7, NFR-8) is left out of the spike.
+
+**Test plan:**
+
+- 20 requests (5 per asset type) × 4 variants.
+- Setup (a), template prompt only: on **FLUX.2 [pro]** and on **FLUX1.1 [pro]**.
+- Setup (b), template plus up to 3 style guide reference images: on **FLUX.2 [pro]** only (FLUX1.1 [pro] takes no reference images).
+- 240 images in total.
+- Measure: on-style rate, tile seams, actual cost per image, latency, whether the things-to-avoid list helps, content filter behaviour and billing, whether the same seed repeats the same image, and how well a background-removal tool handles the props and icons (offline check, not built into the spike).
+
+#### Cost estimate
+
+List prices from Microsoft (Appendix B), in USD. EUR values use 1 USD ≈ 0.9 EUR as a working rate (OQ-6).
+
+| Model and setup | Price per variant (1 MP or less) | 1920 × 1080 background (2 MP) |
+|---|---|---|
+| FLUX1.1 [pro], text only | $0.040 | not possible directly (max 1.6 MP); generate smaller and upscale |
+| FLUX.2 [pro], text only | $0.030 | $0.045 |
+| FLUX.2 [pro] + 3 reference images | $0.075 | $0.090 |
+
+**Spike cost:** about 80 × $0.040 + 80 × $0.033 + 80 × $0.078 ≈ $12 (about €11). With retries and test calls, the spike budget is **€25** (hard cap of 300 billed images, Azure alert at €25).
+
+**Monthly cost at the NFR-10 volume (about 5,200 variants a month):**
+
+| Setup | Monthly cost | Variants the €100 cap affords |
+|---|---|---|
+| FLUX.2 [pro], text only | about $160 (€145) | about 3,700 |
+| FLUX1.1 [pro], text only | about $210 (€190) | about 2,800 |
+| FLUX.2 [pro] + 3 reference images | about $390 (€350) | about 1,500 |
+
+At list prices, the NFR-10 volume does not fit the €100 cap with any FLUX setup. The earlier per-variant target of under €0.02 is below every FLUX list price. Text-model costs (FR-5, FR-7) are extra but small next to image costs, and are measured once a text model is chosen (OQ-8). The owner decides after the spike whether to lower the volume or raise the cap (OQ-29).
+
+**Exit criteria:** at least one setup reaches ≥ 3 of 4 on-style, and that setup's measured cost per variant × the agreed monthly volume fits the cap. Results feed the design document's model choice (DEC-9), set NFR-1, and answer OQ-6, OQ-12, OQ-15, OQ-24, OQ-26, OQ-27 and OQ-29. If no setup reaches the target, revisit the product before design.
 
 ### v1
 
@@ -436,12 +480,13 @@ All decisions below were made by the project owner on 2026-11-26.
 |---|---|---|---|---|---|
 | DEC-1 | Hosting and access | **A.** Local app on the owner's computer, only reachable from that computer; saves exported files on that computer; uses the owner's Azure sign-in. **B.** GitHub Pages for the UI, plus a server part in Azure with sign-in restricted to the owner. | **A** | Single user and a local Unity project. A removes OQ-1, OQ-2 and OQ-3 and most of the security work; B would add hosting, sign-in, network security and running cost. | C-2, FR-13, FR-14, NFR-5 to NFR-7 |
 | DEC-2 | Budget scope | One global cap / one cap per project | **One global cap**; per-project limits as Could | Per-project caps let a new project bypass the limit (N projects = N × €100). | C-4, FR-11 |
-| DEC-3 | Image model | Choose after Phase 0 with preview allowed if a GA fallback works / GA models only / preview with no fallback | **GA models only** (MAI-Image-2.6 or 2.6-Flash, both GA per Appendix A; Phase 0 picks). Preview-only parameters are not used. | No dependency on a model without an SLA. Trade-off: transparency always relies on background removal, and cost per image (priced per token) is only known after Phase 0. | C-3, FR-6, §12, OQ-4, OQ-5 |
+| DEC-3 | Image model status | Choose after Phase 0 with preview allowed if a GA fallback works / GA models only / preview with no fallback | **GA models only** for v1. Preview-only features are not used in v1. Candidates are now set by DEC-9. | No dependency on a model without an SLA. Trade-off: transparency may rely on background removal. | C-3, FR-6, OQ-4, OQ-5 |
 | DEC-4 | Palette size | 5–8 (v0.1) / 1–16 / 3–12 | **Up to 16 colours** (may be empty, DEC-6) | 5–8 rules out monochrome and limited-palette styles. | FR-2 |
 | DEC-5 | Multiple projects in v1 | Must / Should | **Should** (FR-1b) | Not needed to show the core value; one project is enough at first. | FR-1 |
 | DEC-6 | Generating before the style guide is complete | Block / warn but allow / generate with what is set | **Generate with what is set** | Owner's choice: no friction. Trade-off: a sparse guide gives less consistent results (G1) and can spend budget on off-style images. | S2, FR-2, FR-5, OQ-20 |
 | DEC-7 | Unity integration | Small editor script / no code in Unity / none | **No Unity integration** | Owner's choice. Asset Forge only saves PNG files to a folder the user selects; how they are imported into Unity is outside Asset Forge. | S5, FR-13, OQ-9 |
 | DEC-8 | Variations of an approved image (FR-8) | Could in v1 / Later | **Later** | Close to a non-goal and not needed for the core value. | FR-8 |
+| DEC-9 | Model for the spike, and when the final model is chosen | MAI-Image / FLUX | **FLUX for the Phase 0 spike.** The final model is chosen in the design document, after the spike. | MAI-Image models are not available in the owner's Azure region (Spain Central). FLUX models are offered as Global Standard deployments in all regions. | C-3, D-1, §12, OQ-4, Appendix B |
 
 ## 14. Open questions
 
@@ -452,34 +497,36 @@ All decisions below were made by the project owner on 2026-11-26.
 | OQ-1 | Where will the parts that need a server live? | C-2 | Resolved: local app, no server part (DEC-1) | – | – |
 | OQ-2 | How is access limited to the owner? | NFR-6 | Resolved: local-only access (FR-14) | – | – |
 | OQ-3 | How do exported files reach the Unity project on the local machine? | FR-13 | Resolved: saved to a folder the user selects on their computer (FR-13) | – | – |
-| OQ-4 | Which MAI-Image model? Is a preview model acceptable? | FR-6, C-3 | Resolved: GA models only (DEC-3); 2.6 and 2.6-Flash are GA (Appendix A); Phase 0 picks one | – | – |
+| OQ-4 | Which image model for v1? | FR-6, C-3 | Open: chosen in the design document after the spike (DEC-9); GA only (DEC-3) | Design | – |
 | OQ-5 | Is background removal acceptable instead of native transparency? | FR-6 | Resolved: yes, required as fallback (FR-6) | – | – |
-| OQ-6 | Per-image cost in EUR; USD conversion; text-model costs included? | FR-11 | Partly resolved: text-model costs included; fixed configured rate (FR-11). Cost per image open. | Phase 0 | Measured in Phase 0 |
+| OQ-6 | Per-image cost in EUR; USD conversion; text-model costs included? | FR-11 | Partly resolved: text-model costs included; fixed configured rate (FR-11); FLUX list prices in §12. Actual cost per image and the exchange rate to configure are open. | Phase 0 | Measured in Phase 0; working rate 1 USD ≈ 0.9 EUR |
 | OQ-7 | Budget per project or overall? | FR-11 | Moved to DEC-2 | – | – |
-| OQ-8 | Which text model expands prompts, and is it in the Foundry model list? | FR-5, D-2 | Open | Phase 0 | – |
+| OQ-8 | Which text model expands prompts, and is it in the Foundry model list? | FR-5, D-2 | Open (the spike uses no text model) | Design | – |
 | OQ-9 | Unity version; pixels per unit and filter mode per asset type; file naming. | FR-13 | Resolved: Asset Forge has no Unity integration (DEC-7); naming set in FR-13 | – | – |
 | OQ-10 | Can presets be edited per project? | FR-4 | Resolved: fixed in v1, versioned | – | – |
 | OQ-11 | Storage limit; delete rejected images automatically? | FR-10, NFR-7 | Open | No | Keep everything; plan for ≤ 200 GB in year 1 |
-| OQ-12 | Send reference images to the model with every generation? | FR-2, FR-6, cost | Open. The edit endpoint takes up to 5 JPEG or PNG images, but use as style references isn't documented (Appendix A). | Phase 0 | Decided by Phase 0 setup (b) results |
+| OQ-12 | Send reference images to the model with every generation? | FR-2, FR-6, cost | Open. FLUX.2 [pro] takes up to 8 reference images (multi-reference is marked preview) at $0.015 each; use as style references is not documented (Appendix B). | Phase 0 | Decided by spike setup (b) results and cost |
 | OQ-13 | Are tiles always square; default tile size? | FR-4 | Resolved with default; owner to confirm | No | Square; project setting; default 256 px |
 | OQ-14 | Exact background size? | FR-4, FR-12 | Resolved with default; owner to confirm | No | Project setting; default 1920 × 1080 |
 | OQ-15 | Acceptable generation latency? | NFR-2 | Provisional target in NFR-2 | Phase 0 | p95 ≤ 90 s per round |
 | OQ-16 | How is "on-style" judged for SM-1? | SM-1 | Resolved: separate on-style mark (FR-9) | – | – |
-| OQ-17 | Do MAI-Image terms allow commercial use of generated images in a shipped game? | A-4 | Open | v1 release | – |
+| OQ-17 | Do the chosen model's terms allow commercial use of generated images in a shipped game? | A-4 | Open | v1 release | – |
 | OQ-18 | Prop trim rule? | FR-12 | Resolved: size class, bottom-aligned (FR-12a) | – | – |
 | OQ-19 | Can a project be deleted or archived, and what happens to its images? | FR-1 | Open | No | No deletion in v1 |
 | OQ-20 | Generate before the style guide is filled in? | FR-5 | Resolved: generate with whatever is set (DEC-6) | – | – |
 | OQ-21 | Un-approve; re-export behaviour? | FR-9, FR-13 | Resolved: FR-9 status table; re-export overwrites (FR-13) | – | – |
 | OQ-22 | Keep past months' spend viewable? | FR-11 | Resolved: yes (Should) | – | – |
-| OQ-23 | Does the chosen model support a negative prompt, and what is its maximum prompt length? | FR-5 | Resolved from docs: no negative-prompt parameter; prompt up to 32,000 tokens (Appendix A). Phase 0 still measures whether listing things to avoid helps. | – | – |
+| OQ-23 | Does the chosen model support a negative prompt, and what is its maximum prompt length? | FR-5 | Resolved from docs for the candidates: no negative-prompt parameter documented for MAI-Image or FLUX; prompt limits 5,000 tokens (FLUX1.1 [pro], FLUX.1 Kontext [pro]) or 32,000 (FLUX.2, MAI-Image). Phase 0 still measures whether listing things to avoid helps. | – | – |
 | OQ-24 | Are calls refused by the content filter billed? | FR-6, FR-11 | Open | Phase 0 | Assume billed until confirmed |
 | OQ-25 | Are the size-class heights (160 / 320 / 480 px) right for the game? | FR-12 | Open | No | As proposed in FR-12a |
-| OQ-26 | Does the chosen model support a seed for repeatable output? | FR-10 | Resolved from docs: no seed parameter (Appendix A) | – | – |
-| OQ-27 | What is the lowest rate quota the chosen deployment allows, how long does Azure take to report cost, and can key authentication be switched off on the model resource? Together with price per image, these give the worst-case overspend if the in-app cap is bypassed. | NFR-3 | Partly answered: 6 requests per minute at Tier 1 for 2.6 (about 259,000 images a month), so a quota can't hold spend to the cap. Reporting delay and switching off keys: open. | Phase 0 | – |
+| OQ-26 | Does the chosen model support a seed for repeatable output? | FR-10 | Depends on the model: FLUX documents a `seed` parameter, MAI-Image does not. The spike checks whether the same seed repeats the same image. | Phase 0 | Record the seed when available |
+| OQ-27 | What is the lowest rate quota the chosen deployment allows, how long does Azure take to report cost, and can key authentication be switched off on the model resource? Together with price per image, these give the worst-case overspend if the in-app cap is bypassed. | NFR-3 | Partly answered: 6 requests per minute for FLUX1.1 [pro] and 15 for FLUX.2 [pro] at the lowest tier (about 259,000 and 648,000 images a month), so a quota can't hold spend to the cap. Reporting delay and switching off keys: open. | Phase 0 | – |
+| OQ-28 | Does the throwaway spike have to follow the repository's working rules on tests and coverage? | §12 | Open | Phase 0 | Exempt: the spike is thrown away and is not part of v1 |
+| OQ-29 | At list prices the NFR-10 volume costs more than €100 a month with every FLUX setup. Lower the volume, or raise the cap? | NFR-10, C-4, FR-11 | Open | Design | Decide from the spike's measured cost |
 
 ## 15. Change log
 
-Changes from v0.1. *Review #* refers to the issue numbers in the v0.1 review of 2026-11-26.
+Changes from v0.1 onwards, newest at the bottom. *Review #* refers to the issue numbers in the v0.1 review of 2026-11-26.
 
 | Review # | Change | Where |
 |---|---|---|
@@ -522,10 +569,13 @@ Changes from v0.1. *Review #* refers to the issue numbers in the v0.1 review of 
 | – | Export simplified by owner: the user selects any folder on their computer when exporting and the images are saved there. All Unity dependencies removed from export: fixed `Assets/Art/` paths, Unity-project checks, `.meta`/GUID handling, the import settings table and Unity-specific acceptance criteria. A-6 and D-3 removed; OQ-9 closed. Folder remembered per project; cancelled export and unwritable folder covered. | S5, FR-13, AC-13.1 to AC-13.8, DEC-7, A-6, D-3, OQ-3, OQ-9 |
 | – | Cost follow-up review. (1) G5 and NFR-3 no longer promise a hard stop outside the app: Azure budgets only alert and quotas limit rate, not money. NFR-3 now names concrete limits (key authentication off, lowest workable quota, budget action that disables deployments) and treats the worst-case overspend as an accepted risk. (2) Phase 0 must show cost per variant × monthly volume fits the cap (under €0.02 per variant at the NFR-10 volume); otherwise volume is lowered or the cap raised. (3) Every model call, including expansion and feedback text calls, is checked against the cap. | G5, NFR-3, NFR-10, D-7, §12, FR-11, AC-11.10, AC-11.11, OQ-27 |
 | – | Consistency review. Fixed merged table rows (D-2/D-4, A-5/A-7). DEC-4 now allows an empty palette, matching FR-2. Project slug added to export file names. FR-7 feedback changes only the subject part, never the template-built part. Gallery speed target sized to a year at NFR-10 volume. AC-12.4 and AC-12.5 given measurable thresholds. Appendix A re-checked against Microsoft docs; 2.6 and 2.6-Flash confirmed GA on the Learn page (only 2.7, 2.7-Flash and 2.5 are marked preview), so DEC-3 stands. Negative prompt, seed, reference images, size limits, prompt length, rate limits, auth and 2.6-Flash pricing recorded. | §9, §10, DEC-4, FR-1, FR-5, FR-6, FR-7, AC-7.4, FR-13, NFR-2, NFR-3, AC-12.4, AC-12.5, §12, OQ-4, OQ-12, OQ-23, OQ-26, OQ-27, Appendix A |
+| – | **v0.3.** MAI-Image models are not available in the owner's region (Spain Central), so the Phase 0 spike uses FLUX (new DEC-9); the final model is chosen in the design document. Phase 0 is now a one-day spike with a defined thin scope. Costs re-estimated from FLUX list prices: spike about €11 (budget €25); the NFR-10 volume does not fit the €100 cap at list prices (new OQ-29). DEC-3 kept as "GA only" without naming MAI candidates. FLUX facts added in Appendix B; Appendix A kept for reference. New OQ-28 on whether the spike follows the repository's test rules. | C-3, D-1, A-7, FR-5, FR-6, NFR-3, NFR-10, §12, DEC-3, DEC-9, OQ-4, OQ-6, OQ-8, OQ-12, OQ-17, OQ-23, OQ-26 to OQ-29, Appendix B |
 
 ---
 
 ## Appendix A: MAI-Image model evaluation
+
+**Not available in the owner's Azure region (Spain Central), so not used for the spike (DEC-9). Kept for reference in case availability changes before design.**
 
 Research done 2026-11-26 from Microsoft documentation, and re-checked the same day against the Learn page (last updated 2026-11-24) and the MAI-Image-2.6 announcement (2026-09-04). It informs C-3, DEC-3 and the open questions.
 
@@ -556,3 +606,33 @@ Sources:
 - [MAI-Image-2.7 model card (Foundry catalog)](https://ai.azure.com/catalog/models/MAI-Image-2.7)
 - [MAI-Image-2.6 and 2.6-Flash announcement (Microsoft Tech Community)](https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/mai-image-2-6-and-mai-image-2-6-flash-quality-and-speed-at-production-scale/4550970)
 - [MAI Image 2.7 Flash pricing report (third party)](https://superpowerdaily.com/posts/microsoft-releases-mai-image-2-7-with-flash-priced-around-10-per-1-000-images)
+
+## Appendix B: FLUX model evaluation
+
+Research done 2026-11-26 from Microsoft documentation. It informs C-3, DEC-9, §12 and the open questions. The final model is chosen in the design document.
+
+| Model | Foundry status | Inputs | Max output | Reference images | Seed | Price (list, USD) |
+|---|---|---|---|---|---|---|
+| FLUX.2 [pro] | GA; multi-reference marked preview | Text (32,000 tokens) + up to 8 images | 4 MP | Up to 8 | Yes | $0.03 for the first MP of output, $0.015 per further MP; $0.015 per reference image MP |
+| FLUX.2 [flex] | GA; multi-reference marked preview | Text (32,000 tokens) + up to 10 images | 4 MP | Up to 10 | Yes | Per MP; exact Azure price not confirmed |
+| FLUX.1 Kontext [pro] | Available | Text (5,000 tokens) + 1 image | 1 MP | 1 (editing / in-context) | Yes | $40 per 1,000 images |
+| FLUX1.1 [pro] | Available | Text (5,000 tokens) | 1.6 MP | None | Yes | $40 per 1,000 images |
+
+Facts relevant to the requirements:
+
+- **Region:** FLUX models are offered as Global Standard deployments, available from a Foundry resource in any region. With Global Standard, prompts and images may be processed in any Azure region.
+- **APIs:** all FLUX models through the Black Forest Labs provider API (parameters such as `seed`, `width`/`height` or `aspect_ratio`, `safety_tolerance`, `output_format`); FLUX1.1 [pro] and FLUX.1 Kontext [pro] also through the OpenAI-compatible Image API.
+- **Output:** one image per call, PNG or JPEG. So 4 variants are 4 calls.
+- **Transparency:** not documented for any FLUX model, so props and icons need background removal (FR-6, D-6).
+- **Negative prompt:** not documented (FR-5, OQ-23).
+- **Seed:** documented (OQ-26).
+- **Pricing rules for FLUX.2 [pro]:** resolution is rounded up to the next megapixel (1 MP = 1024 × 1024), separately for output and each reference image; inputs over 4 MP are resized to 4 MP.
+- **Rate limits (requests per minute):** FLUX.2 [pro] 15 / 30 / 100 by tier; FLUX.2 [flex] 5 / 10 / 25; FLUX.1 Kontext [pro] 6; FLUX1.1 [pro] 6.
+- **Authentication:** Microsoft Entra ID or API key.
+
+Sources:
+- [Deploy and use FLUX models in Microsoft Foundry (Microsoft Learn)](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-flux)
+- [Foundry Models sold by Azure: Black Forest Labs (Microsoft Learn)](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure?view=foundry-classic)
+- [FLUX.2 on Microsoft Foundry, with pricing (Microsoft Tech Community)](https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/black-forest-labs-flux-2-visual-intelligence-for-enterprise-creative-now-on-micr/4477561)
+- [FLUX.1 Kontext [pro] and FLUX1.1 [pro] in Foundry, with pricing (Microsoft Tech Community)](https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/black-forest-labs-flux-1-kontext-pro-and-flux1-1-pro-now-available-in-azure-ai-f/4434659)
+- [Black Forest Labs pricing page (Azure)](https://azure.microsoft.com/en-us/pricing/details/ai-foundry-models/black-forest-labs/)
