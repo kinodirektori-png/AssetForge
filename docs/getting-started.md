@@ -34,6 +34,15 @@ on Windows (`~/.local/share/AssetForge` on Linux). To use another folder, set `S
 database only, set `ConnectionStrings:AssetForge`. Either can go in user-secrets or an environment variable
 (`Storage__DataRoot`).
 
+## Database changes
+
+The database is migrated automatically when the app starts. After changing the EF Core model, add a migration with the
+`dotnet-ef` tool (`dotnet tool install --global dotnet-ef`):
+
+```
+dotnet ef migrations add <Name> --project src/AssetForge.Infrastructure --output-dir Data/Migrations
+```
+
 ## Tests
 
 ```

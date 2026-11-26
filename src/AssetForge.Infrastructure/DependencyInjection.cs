@@ -1,3 +1,4 @@
+using AssetForge.Application.Projects;
 using AssetForge.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -21,6 +22,7 @@ public static class DependencyInjection
             connection = $"Data Source={Path.Combine(dataRoot, "assetforge.db")}";
         }
         services.AddDbContext<AppDbContext>(o => o.UseSqlite(connection));
+        services.AddScoped<IProjectStore, ProjectStore>();
         return services;
     }
 }

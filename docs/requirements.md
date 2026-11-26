@@ -521,7 +521,7 @@ All decisions below were made by the project owner on 2026-11-26.
 | OQ-25 | Are the size-class heights (160 / 320 / 480 px) right for the game? | FR-12 | Open | No | As proposed in FR-12a |
 | OQ-26 | Does the chosen model support a seed for repeatable output? | FR-10 | Depends on the model: FLUX documents a `seed` parameter, MAI-Image does not. The spike checks whether the same seed repeats the same image. | Phase 0 | Record the seed when available |
 | OQ-27 | What is the lowest rate quota the chosen deployment allows, how long does Azure take to report cost, and can key authentication be switched off on the model resource? Together with price per image, these give the worst-case overspend if the in-app cap is bypassed. | NFR-3 | Partly answered: 6 requests per minute for FLUX1.1 [pro] and 15 for FLUX.2 [pro] at the lowest tier (about 259,000 and 648,000 images a month), so a quota can't hold spend to the cap. Reporting delay and switching off keys: open. | Phase 0 | – |
-| OQ-28 | Does the throwaway spike have to follow the repository's working rules on tests and coverage? | §12 | Open | Phase 0 | Exempt: the spike is thrown away and is not part of v1 |
+| OQ-28 | Does the throwaway spike have to follow the repository's working rules on tests and coverage? | §12 | Resolved: exempt. The spike is thrown away and its code is not reused; the MVP rebuilds it with tests (#7) | – | – |
 | OQ-29 | At list prices the NFR-10 volume costs more than €100 a month with every FLUX setup. Lower the volume, or raise the cap? | NFR-10, C-4, FR-11 | Open | Design | Decide from the spike's measured cost |
 
 ## 15. Change log
