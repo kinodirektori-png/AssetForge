@@ -37,13 +37,15 @@ database only, set `ConnectionStrings:AssetForge`. Either can go in user-secrets
 ## Tests
 
 ```
-dotnet test AssetForge.slnx --settings coverage.runsettings --collect:"XPlat Code Coverage" --results-directory TestResults
+dotnet test AssetForge.slnx
 ```
 
-Then check the 80 % line-coverage gate. The check reads the newest report in `TestResults`. On Windows:
+To check coverage the way the CI "Coverage (80 % lines)" check does:
 
 ```
-pwsh scripts/check-coverage.ps1 80
+dotnet test AssetForge.slnx -p:CollectCoverage=true
 ```
 
-With Python instead: `python3 scripts/check-coverage.py 80`. CI runs both, on Windows and Linux.
+It prints line, branch and method coverage per project and fails if total line coverage is under 80 %. The report is
+written to `TestResults/coverage.cobertura.xml`. A pull request can only be merged into `Main` when both the build and
+the coverage check pass.

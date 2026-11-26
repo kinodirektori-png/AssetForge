@@ -120,6 +120,6 @@ Confirmed by the project owner on 2026-11-26:
   - Microsoft.EntityFrameworkCore.Sqlite and Microsoft.EntityFrameworkCore.Design
   - Microsoft.AspNetCore.OpenApi and Scalar.AspNetCore
   - xunit and xunit.runner.visualstudio (both Apache-2.0)
-  - Microsoft.NET.Test.Sdk, Microsoft.AspNetCore.Mvc.Testing and coverlet.collector
+  - Microsoft.NET.Test.Sdk, Microsoft.AspNetCore.Mvc.Testing and coverlet.msbuild
 - Cross-site and DNS-rebinding protection is in scope (§5), because the endpoints spend money and write files.
 - This file is `docs/spec.md`, the spec that claude.md names as the source of truth.

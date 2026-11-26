@@ -4,8 +4,20 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <!-- Coverage runs only with -p:CollectCoverage=true (the CI "Coverage" check); below 80 % lines that run fails. -->
+  <PropertyGroup>
+    <Include>[AssetForge.Api]*,[AssetForge.Application]*,[AssetForge.Infrastructure]*</Include>
+    <ExcludeByFile>**/Migrations/*.cs</ExcludeByFile>
+    <ExcludeByAttribute>GeneratedCodeAttribute,CompilerGeneratedAttribute</ExcludeByAttribute>
+    <CoverletOutputFormat>cobertura</CoverletOutputFormat>
+    <CoverletOutput>$(MSBuildThisFileDirectory)../../TestResults/</CoverletOutput>
+    <Threshold>80</Threshold>
+    <ThresholdType>line</ThresholdType>
+    <ThresholdStat>total</ThresholdStat>
+  </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="10.1.1" />
+    <PackageReference Include="coverlet.msbuild" Version="10.1.1" PrivateAssets="all" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.15" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
