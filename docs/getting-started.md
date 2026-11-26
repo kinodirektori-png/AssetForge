@@ -30,7 +30,7 @@ setting and paste the token once. `GET /api/status` checks that everything works
 ## Where data is kept
 
 The SQLite database and, later, the generated images live outside the repository, in `%LOCALAPPDATA%\AssetForge`
-on Windows (`~/.local/share/AssetForge` on Linux). To use another folder, set `Storage:DataRoot`; to point at another
+on Windows (`~/.local/share/AssetForge` on Linux). To use another folder, set `Storage:DataRoot` to an absolute path (a relative one is taken as a subfolder of that default, never of the folder you start the app from); to point at another
 database only, set `ConnectionStrings:AssetForge`. Either can go in user-secrets or an environment variable
 (`Storage__DataRoot`).
 

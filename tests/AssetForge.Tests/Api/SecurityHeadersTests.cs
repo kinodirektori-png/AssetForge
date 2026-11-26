@@ -1,5 +1,10 @@
+using System.Net;
 using AssetForge.Api.Security;
 using AssetForge.Tests.Support;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AssetForge.Tests.Api;
 
@@ -44,5 +49,30 @@ public sealed class SecurityHeadersTests : IDisposable
     {
         Assert.DoesNotContain("http", SecurityHeadersMiddleware.ScalarPolicy);
         Assert.DoesNotContain("*", SecurityHeadersMiddleware.ScalarPolicy);
+    }
+
+    [Fact]
+    public async Task Server_errors_keep_the_headers()
+    {
+        using var factory = _factory.WithWebHostBuilder(b =>
+            b.ConfigureServices(s => s.AddTransient<IStartupFilter, ThrowAtEndOfPipeline>()));
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", ApiFactory.Token);
+
+        var response = await client.GetAsync("/api/boom");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal(SecurityHeadersMiddleware.ApiPolicy, response.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+    }
+
+    /// <summary>Adds a last middleware that throws, so an authorized request to an unmapped path ends in a 500.</summary>
+    private sealed class ThrowAtEndOfPipeline : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            next(app);
+            app.Run(_ => throw new InvalidOperationException("boom"));
+        };
     }
 }

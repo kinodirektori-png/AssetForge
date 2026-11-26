@@ -53,7 +53,8 @@ app.UseMiddleware<LocalOnlyMiddleware>();
 app.UseMiddleware<ApiTokenMiddleware>();
 
 app.MapOpenApi();
-app.MapScalarApiReference();
+// Scalar's default fonts come from fonts.scalar.com, which the CSP blocks; use system fonts instead.
+app.MapScalarApiReference(options => options.DisableDefaultFonts());
 app.MapGet("/", () => Results.Redirect("/scalar/v1")).ExcludeFromDescription();
 app.MapStatus();
 

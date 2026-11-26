@@ -15,10 +15,21 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next)
 
     public Task InvokeAsync(HttpContext context)
     {
+        // Set just before the response starts, so the headers survive the exception handler, which clears headers
+        // before writing a 500.
+        context.Response.OnStarting(() =>
+        {
+            Apply(context);
+            return Task.CompletedTask;
+        });
+        return next(context);
+    }
+
+    private static void Apply(HttpContext context)
+    {
         var headers = context.Response.Headers;
         headers.ContentSecurityPolicy = context.Request.Path.StartsWithSegments("/scalar") ? ScalarPolicy : ApiPolicy;
         headers.XContentTypeOptions = "nosniff";
         headers["Referrer-Policy"] = "no-referrer";
-        return next(context);
     }
 }

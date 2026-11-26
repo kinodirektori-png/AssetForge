@@ -27,6 +27,14 @@ public sealed class DataPathsTests
     }
 
     [Fact]
+    public void Relative_data_root_is_under_local_app_data_not_the_working_directory()
+    {
+        string expected = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AssetForge", "demo");
+
+        Assert.Equal(expected, DataPaths.Root(Config(("Storage:DataRoot", "demo"))));
+    }
+
+    [Fact]
     public void Blank_setting_falls_back_to_the_default()
     {
         Assert.Equal(DataPaths.Root(Config()), DataPaths.Root(Config(("Storage:DataRoot", "  "))));
