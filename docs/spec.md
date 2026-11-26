@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Plan for the project owner's approval. Implementation starts only after approval. |
+| **Status** | Approved by the project owner on 2026-11-26. Implemented one issue at a time, in the order of §7. |
 | **Date** | 2026-11-26 |
 | **Reference** | [requirements.md](requirements.md) v0.3 describes the full v1. This spec is the smaller MVP and wins where the two differ. Requirement IDs (FR-n, AC-n.m) point into requirements.md. |
 
@@ -46,7 +46,9 @@ A local ASP.NET Core Web API that turns a short request ("mossy stone door") plu
   - `AssetForge.Infrastructure`: EF Core DbContext and migrations, FLUX image client, file image store, export writer.
   - `AssetForge.Tests`: unit tests, plus endpoint tests through the in-memory test host with a fake image model.
 - **External calls behind interfaces:** `IImageGenerator`, `IImageStore` and `IExportWriter`, with time from .NET's `TimeProvider`. Fakes are the default in tests, and no test calls Azure.
-- **Data:** EF Core with SQLite in a local file. The database is migrated at startup.
+- **Data:** EF Core with SQLite in a local file in the user profile (`%LOCALAPPDATA%\AssetForge` on Windows), outside the repository. `Storage:DataRoot` or `ConnectionStrings:AssetForge` change it ([0002](adr/0002-sqlite-ef-core-local-data.md)). The database is migrated at startup.
+- **Errors:** every error is ProblemDetails. Application errors map to 400 (validation), 404 and 409. Anything unexpected becomes a 500 with a generic message, and the exception with its stack trace goes to the local log only.
+- **Build:** warnings are errors in every project.
 - **Configuration:** appsettings plus environment variables. Secrets come from user-secrets locally (`Foundry:Endpoint`, `Foundry:ApiKey`, `Security:ApiToken`). Keys, tokens and full prompts are never logged.
 - **Image model:** the MVP generates through `IImageGenerator` and does not depend on one model. The MVP model is chosen per DEC-9 after the spike; FLUX.2 [pro] is the spike model only. Until that decision, the MVP runs on the spike's FLUX.2 [pro] client: `POST {endpoint}/providers/blackforestlabs/v1/{deployment}?api-version=preview` with `Authorization: Bearer <key>`, and a body with the model, prompt, width, height, seed and `output_format: png`. The model is GA but this route only has `api-version=preview`. That is an accepted departure from DEC-3 (GA only) for the MVP, and it is reviewed when DEC-9 is decided. Model, deployment and API version come from configuration and are stored with each image.
 - **Per-model limits are configuration, not code (NFR-9):** each model's settings hold its size limits (smallest side, largest total), maximum prompt length and prices. Requested sizes are checked against them at startup and before every call. For FLUX.2 [pro] (Appendix B) the output is at most 4 MP (1 MP = 1024 × 1024), the prompt at most 32,000 tokens, and no minimum side is documented. The MVP default output is 1024 × 1024 PNG.
@@ -58,28 +60,30 @@ A local ASP.NET Core Web API that turns a short request ("mossy stone door") plu
 
 Every endpoint that spends money or touches files must be safe from other devices, from web pages open in the owner's browser, and from DNS rebinding. Origin checks alone are not enough. A rebound page counts as same-origin, and requests with no body or a simple body skip the CORS preflight. So the API uses these layers, all applied before any endpoint, model call or data access:
 
-1. **Loopback only.** Kestrel listens on `localhost` only. Requests whose remote address is not loopback are refused, so other devices cannot connect (AC-14.1, AC-14.2).
-2. **Host allowlist.** Only `localhost` and `127.0.0.1` are accepted as hosts, through ASP.NET Core host filtering (`AllowedHosts` is `localhost;127.0.0.1`). Any other host is refused with 400. A DNS-rebinding page sends its own host name (for example `evil.example`), so it is refused here (AC-14.3). The app does not start if `AllowedHosts` is `*`.
-3. **API token.** Every `/api` request must carry `Authorization: Bearer <token>`. The token is a random value of at least 32 characters that the owner sets in user-secrets (`Security:ApiToken`), and the app does not start without it. A web page cannot know it. It is also a non-simple header, so a browser must send a CORS preflight first. The API answers no CORS requests, so the preflight fails. The token is compared in constant time and never logged. In Scalar, the owner enters it once in the authentication panel.
-4. **Cross-site refusal.** State-changing requests from another origin are refused. They are checked with `Origin`, which must be absent or the app's own origin, and with `Sec-Fetch-Site`, where `cross-site` and `same-site` are refused. The `same-site` case covers another local app on a different port. This is defence in depth on top of 2 and 3.
-5. **JSON bodies only.** Every POST and PUT needs a JSON body with `Content-Type: application/json`, even where the body is just `{}`, for example on approve. A missing body or any other content type is refused with 415. Browsers cannot send such a request cross-origin without a CORS preflight, and the preflight fails.
+1. **Loopback only.** Kestrel listens on `localhost` only, on port 5062 by default (`Server:Port`). Requests whose remote address is not loopback are refused, so other devices cannot connect (AC-14.1, AC-14.2).
+2. **Host allowlist.** Only `localhost` and `127.0.0.1` are accepted as hosts, through ASP.NET Core host filtering (`AllowedHosts` is `localhost;127.0.0.1`). Any other host is refused with 400. A DNS-rebinding page sends its own host name (for example `evil.example`), so it is refused here (AC-14.3). The app does not start if `AllowedHosts` lists anything else.
+3. **API token.** Every request except `/`, `/openapi/*` and `/scalar/*` must carry `Authorization: Bearer <token>`. The token is a random value of at least 32 characters that the owner sets in user-secrets (`Security:ApiToken`), and the app does not start without it. A web page cannot know it. It is also a non-simple header, so a browser must send a CORS preflight first. The API answers no CORS requests, so the preflight fails. The token is compared in constant time and never logged. In Scalar, the owner enters it once in the authentication panel.
+4. **Cross-site refusal.** Requests from another origin are refused with 403, whatever their method. They are checked with `Origin`, which must be absent or the app's own origin, and with `Sec-Fetch-Site`, where `cross-site` and `same-site` are refused. The `same-site` case covers another local app on a different port. This is defence in depth on top of 2 and 3.
+5. **JSON bodies only.** Every POST, PUT and PATCH needs a JSON body with `Content-Type: application/json`, even where the body is just `{}`, for example on approve, and a body on any other method must be JSON too. A missing body or any other content type is refused with 415. Browsers cannot send such a request cross-origin without a CORS preflight, and the preflight fails.
 6. **Unguessable IDs.** Projects, requests, images and exports use GUIDs (`Guid.CreateVersion7()`), not sequential integers.
 7. **Export root.** The request never takes a path. The export root comes only from configuration (`Export:Root`, for example the Unity project's `Assets/Art`), and it has no default: until the owner sets it, export is refused. The request may name a subfolder matching `^[a-z0-9-]{1,64}$`. The server builds the full path, refuses it unless it is still under the root, and refuses a subfolder or an existing target file that is a symlink or junction. File names are built on the server from slugs and the image ID (FR-13). This deliberately narrows FR-13 ("any folder the user can write to"). Only the owner can change the root, by editing configuration.
+8. **Security headers.** Every response, including a 500, carries a Content-Security-Policy, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`. API responses get `default-src 'none'`. The Scalar pages may load scripts, styles and fonts and send requests only to the app itself, so no third-party script can read the token or send it elsewhere ([0003](adr/0003-scalar-openapi-ui.md)).
 
-Tests cover each layer and show that nothing happens when a request is refused: no model call, no change in spend, and no file written. The refused cases are:
+Layers 1 to 5 and 8 are in place from #4; layer 6 arrives with the first entities (#5) and layer 7 with export (#11). Tests cover each layer and show that nothing happens when a request is refused: no model call, no change in spend, and no file written. The refused cases are:
 - a request from a non-loopback address;
 - a wrong Host;
 - a missing or wrong token;
 - a cross-site `Origin` or `Sec-Fetch-Site`;
-- a POST or PUT with no body, or with a form-encoded or `text/plain` body;
+- a POST, PUT or PATCH with no body, or any request with a form-encoded or `text/plain` body;
 - an export subfolder that escapes the root (`..`, an absolute path, a symlink).
 
 ## 6. Endpoints
 
-All paths are under `/api` and need the token from §5. Every POST and PUT sends a JSON body, `{}` where nothing else is needed. The OpenAPI document (`/openapi/v1.json`) and Scalar (`/scalar/v1`) contain no data and are served without the token.
+All paths are under `/api` and need the token from §5. Every POST and PUT sends a JSON body, `{}` where nothing else is needed. Only `/` (a redirect to Scalar), the OpenAPI document (`/openapi/v1.json`) and Scalar (`/scalar/v1`) are served without the token; they contain no data.
 
 | Method and path | Purpose |
 |---|---|
+| `GET /api/status` | Returns `{ "status": "ok" }`. A token-protected check that the access layers let a valid request through |
 | `POST /api/projects`, `GET /api/projects`, `GET /api/projects/{id}` | Create, list and read projects |
 | `GET /api/projects/{id}/style-guide`, `PUT /api/projects/{id}/style-guide` | Read and save the style guide |
 | `POST /api/projects/{id}/requests` | Create a request; returns the expanded prompt |
@@ -108,6 +112,8 @@ Each step comes as its own small pull request with tests, after this plan is app
 
 ## 8. Decisions
 
+Each decision, with its context and the options weighed, is recorded in [docs/adr](adr/README.md).
+
 Confirmed by the project owner on 2026-11-26:
 
 - SQLite is the local database.
@@ -120,6 +126,6 @@ Confirmed by the project owner on 2026-11-26:
   - Microsoft.EntityFrameworkCore.Sqlite and Microsoft.EntityFrameworkCore.Design
   - Microsoft.AspNetCore.OpenApi and Scalar.AspNetCore
   - xunit and xunit.runner.visualstudio (both Apache-2.0)
-  - Microsoft.NET.Test.Sdk, Microsoft.AspNetCore.Mvc.Testing and coverlet.collector
+  - Microsoft.NET.Test.Sdk, Microsoft.AspNetCore.Mvc.Testing and coverlet.msbuild
 - Cross-site and DNS-rebinding protection is in scope (§5), because the endpoints spend money and write files.
 - This file is `docs/spec.md`, the spec that claude.md names as the source of truth.

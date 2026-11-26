@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [Main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build AssetForge.slnx --configuration Release
+
+      - name: Test
+        run: dotnet test AssetForge.slnx --no-build --configuration Release
+
+  coverage:
+    # A separate check so that low coverage blocks the merge (branch rule on Main) without failing build and test.
+    name: Coverage (80 % lines)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test with coverage gate
+        run: dotnet test AssetForge.slnx --configuration Release -p:CollectCoverage=true
