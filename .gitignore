@@ -5,3 +5,10 @@ TestResults/
 *.db
 *.db-shm
 *.db-wal
+
+# Visual Studio and IDE per-user state
+.vs/
+*.user
+*.suo
+.idea/
+.vscode/
