@@ -29,8 +29,9 @@ It never changes code to match the docs: a real gap in the code is reported, not
    - NuGet packages and versions in every `.csproj` (compare with spec §8 and ADR 0013).
    - Endpoints: every `Map*` call (`grep -rn "Map\(Get\|Post\|Put\|Patch\|Delete\|Group\)" src`), including public ones.
    - Middleware order and behaviour in `Program.cs` and `src/AssetForge.Api/Security/` (compare with spec §5 and ADR 0004).
-   - Configuration keys read by the code (`grep -rn 'config\[\|GetValue\|GetSection\|GetConnectionString' src`) and the
-     defaults in `appsettings.json` and `launchSettings.json`.
+   - Configuration keys read by the code, including options bindings
+     (`grep -rn 'config\[\|Configuration\[\|GetValue\|GetSection\|GetConnectionString\|BindConfiguration\|Bind(\|Configure<\|AddOptions<' src`),
+     the `Section` constants and property names of the bound options classes, and the defaults in `appsettings.json` and `launchSettings.json`.
    - Startup checks, data paths, error handling.
    - CI jobs and their names in `.github/workflows/` (compare with ADR 0012 and getting-started).
    - What the tests assert, when the docs make a claim about behaviour (`tests/`).
@@ -59,8 +60,12 @@ It never changes code to match the docs: a real gap in the code is reported, not
    - Re-read each changed section against the code once more.
    - No personal names, logins or emails anywhere (the repository is anonymous). Say "the project owner".
    - No secrets, keys or tokens, not even example values that look real.
-7. **Report.** List each change by file, each superseding ADR, and each mismatch left open for the owner, with its
-   evidence (file and line). Commit on the task branch with a message that names the task.
+7. **Commit and report.**
+   - Never commit directly to `Main`. Check `git branch --show-current` first; if it is `Main`, create a
+     `docs/<task>` branch and commit there.
+   - Commit with a message that names the task.
+   - List each change by file, each superseding ADR, and each mismatch left open for the owner, with its evidence (file
+     and line).
 
 ## Not this skill's job
 

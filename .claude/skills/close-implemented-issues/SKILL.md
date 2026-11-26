@@ -9,7 +9,9 @@ An issue is done when its scope and acceptance criteria are met by code **and** 
 This skill checks each open issue, closes the ones that are done with the evidence in a comment, and splits the rest of
 a partially done issue into a follow-up.
 
-Running this skill is the go-ahead to close and create issues. If the user asks for a dry run, stop after step 4.
+Present the classification table from step 4 and wait for explicit approval before closing or creating any issue, unless
+the user explicitly passed `--yes` or asked to auto-apply. Approval covers only the issues and actions in the table; if
+the table changes, ask again. A dry run stops after step 4.
 
 ## Steps
 
@@ -34,16 +36,20 @@ Running this skill is the go-ahead to close and create issues. If the user asks 
    - **Partial:** at least one line done and at least one missing.
    - **Not started / in progress:** nothing done on `Main`, or the work is in an open PR. Leave it alone.
 
-   Show the result as a table (issue, classification, missing lines) before acting.
+   Show the result as a table (issue, classification, missing lines, planned action) and wait for approval (see above).
 5. **Close done issues.** Comment first, then close with reason `completed`. The comment lists each checklist line with
    its code and test evidence, and the commit or PR that delivered it.
 6. **Split partial issues.**
    - Search open and closed issues first so you do not create a duplicate follow-up.
-   - Create one follow-up issue titled `Follow-up to #N: <what is left>`. Its body says `Follow-up to #N.`, then
+   - Create one follow-up issue titled `Follow-up to #N: <what is left>`. Its body starts with `Parent issue: #N` on the
+     first line. If #N is itself a follow-up, find its root (the issue at the start of the chain) and write
+     `Follow-up to #N, originally from #ROOT.` so the lineage is not lost; otherwise `Follow-up to #N.` Then
      **Scope** with only the missing lines, copied with their requirement ids, and **Acceptance** with the matching
      criteria. Keep the original wording; do not add new scope.
    - Comment on the original with the done lines and their evidence, and `Remaining work moved to #M.`
-   - Close the original with reason `completed`. If the tool supports sub-issues, also link #M under #N.
+   - Close the original with reason `completed`.
+   - Link #M under #N as a sub-issue where the tool supports it (the GitHub MCP `sub_issue_write`; the `gh` CLI needs a
+     GraphQL call). If neither works, the `Parent issue: #N` line in #M's body is the link; say so in the report.
    - If the remaining lines are clearly part of a later planned issue (spec §7), add them to that issue with a comment
      instead of creating a new one, and say so in the original's comment.
 7. **Report** to the user: closed issues, follow-ups created (with links), issues left open and why, and any unclear
