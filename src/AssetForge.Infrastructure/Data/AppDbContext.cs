@@ -1,4 +1,3 @@
-using System.Globalization;
 using AssetForge.Application.Projects;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,6 +7,10 @@ namespace AssetForge.Infrastructure.Data;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Project> Projects => Set<Project>();
+
+    /// <summary>Every timestamp, nullable ones included, is stored as sortable text.</summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder b) =>
+        b.Properties<DateTimeOffset>().HaveConversion<DateTimeOffsetToUtcIsoStringConverter>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -19,10 +22,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.HasIndex(p => p.NormalizedName).IsUnique();
             e.Property(p => p.Slug).HasMaxLength(Slugs.MaxLength);
             e.HasIndex(p => p.Slug).IsUnique();
-            // SQLite cannot order by DateTimeOffset, so store it as text in ISO 8601 form, which sorts correctly.
-            e.Property(p => p.CreatedAt).HasConversion(
-                v => v.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
-                v => DateTimeOffset.ParseExact(v, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
             e.OwnsOne(p => p.StyleGuide, g =>
             {
                 g.Property(x => x.Description).HasMaxLength(StyleGuide.MaxDescriptionLength);

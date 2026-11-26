@@ -37,11 +37,17 @@ database only, set `ConnectionStrings:AssetForge`. Either can go in user-secrets
 ## Database changes
 
 The database is migrated automatically when the app starts. After changing the EF Core model, add a migration with the
-`dotnet-ef` tool (`dotnet tool install --global dotnet-ef`):
+`dotnet-ef` tool. Its version is pinned in `.config/dotnet-tools.json` to match the EF Core packages, so restore it once
+instead of installing it globally:
 
 ```
+dotnet tool restore
 dotnet ef migrations add <Name> --project src/AssetForge.Infrastructure --output-dir Data/Migrations
 ```
+
+Timestamps are stored as UTC text in ISO 8601 form (`DateTimeOffsetToUtcIsoStringConverter`), so the database can sort
+and filter by them. The converter is not recorded in migrations, so a change to it needs no migration but does change how
+new values are stored.
 
 ## Tests
 

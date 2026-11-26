@@ -5,7 +5,11 @@ public interface IProjectStore
 {
     Task<IReadOnlyList<Project>> ListAsync(CancellationToken ct);
 
+    /// <summary>Reads a project without tracking it. Changes to the result are not saved.</summary>
     Task<Project?> FindAsync(Guid id, CancellationToken ct);
+
+    /// <summary>Reads a project for <see cref="SaveStyleGuideAsync"/>, which saves changes made to it.</summary>
+    Task<Project?> FindForUpdateAsync(Guid id, CancellationToken ct);
 
     Task<bool> NameExistsAsync(string normalizedName, CancellationToken ct);
 

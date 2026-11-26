@@ -41,7 +41,8 @@ public sealed class ErrorHandlingTests
         var (status, body) = await Handle(new NotFoundException("Project"));
 
         Assert.Equal(404, status);
-        Assert.Equal("Project was not found.", body.GetProperty("title").GetString());
+        Assert.Equal("Not found", body.GetProperty("title").GetString());
+        Assert.Equal("Project was not found.", body.GetProperty("detail").GetString());
     }
 
     [Fact]
@@ -50,7 +51,8 @@ public sealed class ErrorHandlingTests
         var (status, body) = await Handle(new ConflictException("Not allowed now."));
 
         Assert.Equal(409, status);
-        Assert.Equal("Not allowed now.", body.GetProperty("title").GetString());
+        Assert.Equal("Conflict", body.GetProperty("title").GetString());
+        Assert.Equal("Not allowed now.", body.GetProperty("detail").GetString());
     }
 
     [Fact]

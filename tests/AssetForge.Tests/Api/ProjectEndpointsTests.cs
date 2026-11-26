@@ -5,6 +5,8 @@ using System.Text.Json;
 using AssetForge.Application.Projects;
 using AssetForge.Infrastructure.Data;
 using AssetForge.Tests.Support;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AssetForge.Tests.Api;
@@ -31,7 +33,7 @@ public sealed class ProjectEndpointsTests : IDisposable
     private async Task<int> ProjectCountAsync()
     {
         using var scope = _factory.Services.CreateScope();
-        return scope.ServiceProvider.GetRequiredService<AppDbContext>().Projects.Count();
+        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().Projects.CountAsync();
     }
 
     private static async Task<Dictionary<string, string[]>> ErrorsAsync(HttpResponseMessage response)
@@ -85,7 +87,48 @@ public sealed class ProjectEndpointsTests : IDisposable
 
         var list = await _client.GetFromJsonAsync<List<ProjectDto>>("/api/projects", Json);
 
+        // The fake clock steps one second per read, so the order comes from CreatedAt, not from timing or the ids.
         Assert.Equal([a.Id, b.Id, c.Id], list!.Select(p => p.Id));
+        Assert.True(a.CreatedAt < b.CreatedAt && b.CreatedAt < c.CreatedAt);
+        Assert.Equal(TimeSpan.Zero, a.CreatedAt.Offset);
+    }
+
+    [Fact]
+    public async Task List_is_ordered_by_time_even_when_ids_are_not()
+    {
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            // The newer project gets the smaller id, so only CreatedAt can put them in the right order.
+            var start = SteppingTimeProvider.Start;
+            db.Projects.Add(new Project { Id = Guid.Parse("00000000-0000-7000-8000-000000000002"), Name = "Old", NormalizedName = "OLD", Slug = "old", CreatedAt = start });
+            db.Projects.Add(new Project { Id = Guid.Parse("00000000-0000-7000-8000-000000000001"), Name = "New", NormalizedName = "NEW", Slug = "new", CreatedAt = start.AddMilliseconds(1) });
+            await db.SaveChangesAsync();
+        }
+
+        var list = await _client.GetFromJsonAsync<List<ProjectDto>>("/api/projects", Json);
+
+        Assert.Equal(["Old", "New"], list!.Select(p => p.Name));
+    }
+
+    [Fact]
+    public async Task Style_guide_save_time_can_be_sorted_and_filtered_in_the_database()
+    {
+        var first = await CreateAsync("First");
+        var second = await CreateAsync("Second");
+        await _client.PutAsJsonAsync($"/api/projects/{second.Id}/style-guide", new { });
+        await _client.PutAsJsonAsync($"/api/projects/{first.Id}/style-guide", new { });
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var cutoff = SteppingTimeProvider.Start;
+        var names = await db.Projects
+            .Where(p => p.StyleGuide.UpdatedAt > cutoff)
+            .OrderBy(p => p.StyleGuide.UpdatedAt)
+            .Select(p => p.Name)
+            .ToListAsync();
+
+        Assert.Equal(["Second", "First"], names);
     }
 
     [Theory]
@@ -125,6 +168,57 @@ public sealed class ProjectEndpointsTests : IDisposable
 
         Assert.Contains("50", Assert.Single(errors["name"]));
         Assert.Equal(1, await ProjectCountAsync());
+    }
+
+    [Fact]
+    public async Task The_name_limit_counts_characters_not_code_units()
+    {
+        // Each 🐉 is two UTF-16 code units but one character (FR-1).
+        string fifty = string.Concat(Enumerable.Repeat("🐉", 50));
+        Assert.Equal(fifty, (await CreateAsync(fifty)).Name);
+
+        var errors = await ErrorsAsync(await _client.PostAsJsonAsync("/api/projects", new { name = fifty + "x" }));
+        Assert.Contains("50", Assert.Single(errors["name"]));
+    }
+
+    [Fact]
+    public async Task Conflicts_share_one_title_and_name_the_project_in_detail()
+    {
+        await CreateAsync("Dungeon");
+        await CreateAsync("Forest");
+
+        var first = await ProblemAsync(await _client.PostAsJsonAsync("/api/projects", new { name = "dungeon" }));
+        var second = await ProblemAsync(await _client.PostAsJsonAsync("/api/projects", new { name = "forest" }));
+
+        Assert.Equal("Conflict", first.GetProperty("title").GetString());
+        Assert.Equal("Conflict", second.GetProperty("title").GetString());
+        Assert.Contains("dungeon", first.GetProperty("detail").GetString());
+        Assert.Contains("forest", second.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task Not_found_has_a_fixed_title()
+    {
+        var problem = await ProblemAsync(await _client.GetAsync($"/api/projects/{Guid.CreateVersion7()}"));
+
+        Assert.Equal("Not found", problem.GetProperty("title").GetString());
+        Assert.Equal("The project was not found.", problem.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task OpenApi_lists_the_collection_path_without_a_trailing_slash()
+    {
+        using var doc = JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
+        var paths = doc.RootElement.GetProperty("paths");
+
+        Assert.True(paths.TryGetProperty("/api/projects", out _));
+        Assert.False(paths.TryGetProperty("/api/projects/", out _));
+    }
+
+    private static async Task<JsonElement> ProblemAsync(HttpResponseMessage response)
+    {
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
     }
 
     [Fact]
@@ -498,5 +592,51 @@ public sealed class ProjectEndpointsTests : IDisposable
         var ex = await Assert.ThrowsAsync<AssetForge.Application.ConflictException>(() => store.AddAsync(duplicate, CancellationToken.None));
         Assert.Contains("already exists", ex.Message);
         Assert.Equal(1, await ProjectCountAsync());
+    }
+
+    [Fact]
+    public async Task A_rejected_write_that_is_not_a_duplicate_is_not_reported_as_a_conflict()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
+
+        // A NOT NULL failure is also SQLITE_CONSTRAINT (19), but not a unique-index clash (2067).
+        var broken = new Project { Id = Guid.CreateVersion7(), Name = null!, NormalizedName = "BROKEN", Slug = "broken" };
+
+        var ex = await Assert.ThrowsAsync<DbUpdateException>(() => store.AddAsync(broken, CancellationToken.None));
+        Assert.Equal(19, Assert.IsType<SqliteException>(ex.InnerException).SqliteErrorCode);
+        Assert.Equal(0, await ProjectCountAsync());
+    }
+
+    [Fact]
+    public async Task Reads_do_not_track_and_only_the_update_read_does()
+    {
+        var project = await CreateAsync("Dungeon");
+        using var scope = _factory.Services.CreateScope();
+        var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        Assert.NotNull(await store.FindAsync(project.Id, CancellationToken.None));
+        Assert.Empty(db.ChangeTracker.Entries());
+
+        Assert.NotNull(await store.FindForUpdateAsync(project.Id, CancellationToken.None));
+        Assert.NotEmpty(db.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task The_style_guide_dto_does_not_share_lists_with_the_saved_guide()
+    {
+        var project = await CreateAsync("Dungeon");
+        using var scope = _factory.Services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<ProjectService>();
+
+        var saved = await service.SaveStyleGuideAsync(project.Id, new StyleGuideInput(Palette: ["#112233"], Avoid: ["text"]), CancellationToken.None);
+
+        // Before the fix the DTO held the entity's own List<string>, which a caller could cast back and change.
+        Assert.False(saved.Palette is List<string>);
+        Assert.False(saved.Avoid is List<string>);
+        var read = await service.GetStyleGuideAsync(project.Id, CancellationToken.None);
+        Assert.Equal(["#112233"], read.Palette);
+        Assert.Equal(["text"], read.Avoid);
     }
 }

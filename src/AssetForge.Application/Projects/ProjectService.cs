@@ -4,28 +4,6 @@ using System.Text.RegularExpressions;
 
 namespace AssetForge.Application.Projects;
 
-public sealed record ProjectDto(Guid Id, string Name, string Slug, DateTimeOffset CreatedAt);
-
-public sealed record StyleGuideDto(
-    string? Description,
-    string? Perspective,
-    IReadOnlyList<string> Palette,
-    string? Lighting,
-    string? Outline,
-    string? DetailLevel,
-    IReadOnlyList<string> Avoid,
-    DateTimeOffset? UpdatedAt);
-
-/// <summary>Input for saving a style guide. Missing fields and lists are saved as empty (DEC-6).</summary>
-public sealed record StyleGuideInput(
-    string? Description = null,
-    string? Perspective = null,
-    IReadOnlyList<string?>? Palette = null,
-    string? Lighting = null,
-    string? Outline = null,
-    string? DetailLevel = null,
-    IReadOnlyList<string?>? Avoid = null);
-
 /// <summary>FR-1a projects and the FR-2 style guide.</summary>
 public sealed partial class ProjectService(IProjectStore store, TimeProvider clock)
 {
@@ -36,7 +14,8 @@ public sealed partial class ProjectService(IProjectStore store, TimeProvider clo
         var errors = new Errors();
         if (trimmed.Length == 0)
             errors.Add("name", "Name is required.");
-        else if (trimmed.Length > Project.MaxNameLength)
+        // FR-1 counts characters as people see them, so an emoji or a letter with an accent counts as one.
+        else if (new StringInfo(trimmed).LengthInTextElements > Project.MaxNameLength)
             errors.Add("name", $"Name must be at most {Project.MaxNameLength} characters.");
         else if (trimmed.Any(IsHiddenCharacter))
             errors.Add("name", "Name must not contain control or invisible formatting characters.");
@@ -72,7 +51,7 @@ public sealed partial class ProjectService(IProjectStore store, TimeProvider clo
     public async Task<StyleGuideDto> SaveStyleGuideAsync(Guid projectId, StyleGuideInput input, CancellationToken ct)
     {
         var guide = Validate(input, clock.GetUtcNow());
-        var project = await FindAsync(projectId, ct);
+        var project = await store.FindForUpdateAsync(projectId, ct) ?? throw NotFound();
         await store.SaveStyleGuideAsync(project, guide, ct);
         return ToDto(guide);
     }
@@ -144,12 +123,15 @@ public sealed partial class ProjectService(IProjectStore store, TimeProvider clo
     private static string Shorten(string value) => value.Length <= 20 ? value : value[..20] + "…";
 
     private async Task<Project> FindAsync(Guid id, CancellationToken ct) =>
-        await store.FindAsync(id, ct) ?? throw new NotFoundException("The project");
+        await store.FindAsync(id, ct) ?? throw NotFound();
+
+    private static NotFoundException NotFound() => new("The project");
 
     private static ProjectDto ToDto(Project p) => new(p.Id, p.Name, p.Slug, p.CreatedAt);
 
+    // The lists are copied so the DTO cannot be used to change the entity.
     private static StyleGuideDto ToDto(StyleGuide g) =>
-        new(g.Description, g.Perspective, g.Palette, g.Lighting, g.Outline, g.DetailLevel, g.Avoid, g.UpdatedAt);
+        new(g.Description, g.Perspective, [.. g.Palette], g.Lighting, g.Outline, g.DetailLevel, [.. g.Avoid], g.UpdatedAt);
 
     [GeneratedRegex("^#[0-9A-Fa-f]{6}$")]
     private static partial Regex HexColour();

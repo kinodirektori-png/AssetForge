@@ -2,8 +2,6 @@ using AssetForge.Application.Projects;
 
 namespace AssetForge.Api.Endpoints;
 
-public sealed record CreateProjectBody(string? Name);
-
 /// <summary>FR-1a projects and the FR-2 style guide (spec §6). Validation happens in <see cref="ProjectService"/>.</summary>
 public static class ProjectEndpoints
 {
@@ -11,7 +9,8 @@ public static class ProjectEndpoints
     {
         var projects = app.MapGroup("/api/projects").WithTags("Projects");
 
-        projects.MapPost("/", async (CreateProjectBody body, ProjectService service, CancellationToken ct) =>
+        // "" rather than "/", so OpenAPI shows /api/projects without a trailing slash.
+        projects.MapPost("", async (CreateProjectInput body, ProjectService service, CancellationToken ct) =>
             {
                 var project = await service.CreateAsync(body.Name, ct);
                 return TypedResults.Created($"/api/projects/{project.Id}", project);
@@ -20,7 +19,7 @@ public static class ProjectEndpoints
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status409Conflict);
 
-        projects.MapGet("/", (ProjectService service, CancellationToken ct) => service.ListAsync(ct))
+        projects.MapGet("", (ProjectService service, CancellationToken ct) => service.ListAsync(ct))
             .WithSummary("List projects, oldest first");
 
         projects.MapGet("/{id:guid}", (Guid id, ProjectService service, CancellationToken ct) => service.GetAsync(id, ct))

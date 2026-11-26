@@ -7,10 +7,16 @@ namespace AssetForge.Infrastructure.Data;
 
 public sealed class ProjectStore(AppDbContext db) : IProjectStore
 {
+    /// <summary>SQLITE_CONSTRAINT_UNIQUE: a unique index refused the row. Other constraint failures are not conflicts.</summary>
+    private const int UniqueConstraintFailed = 2067;
+
     public async Task<IReadOnlyList<Project>> ListAsync(CancellationToken ct) =>
         await db.Projects.AsNoTracking().OrderBy(p => p.CreatedAt).ThenBy(p => p.Id).ToListAsync(ct);
 
     public Task<Project?> FindAsync(Guid id, CancellationToken ct) =>
+        db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
+
+    public Task<Project?> FindForUpdateAsync(Guid id, CancellationToken ct) =>
         db.Projects.FirstOrDefaultAsync(p => p.Id == id, ct);
 
     public Task<bool> NameExistsAsync(string normalizedName, CancellationToken ct) =>
@@ -26,11 +32,12 @@ public sealed class ProjectStore(AppDbContext db) : IProjectStore
         {
             await db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteErrorCode: 19 })
+        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteExtendedErrorCode: UniqueConstraintFailed })
         {
-            // A unique index caught a project created at the same moment (SQLITE_CONSTRAINT).
+            // A project created at the same moment took the name or the slug. Ask the database which one,
+            // instead of reading SQLite's error text.
             db.Entry(project).State = EntityState.Detached;
-            throw new ConflictException(ex.InnerException.Message.Contains(nameof(Project.NormalizedName), StringComparison.Ordinal)
+            throw new ConflictException(await NameExistsAsync(project.NormalizedName, ct)
                 ? $"A project named \"{project.Name}\" already exists."
                 : "Another project was created at the same moment. Try again.");
         }
