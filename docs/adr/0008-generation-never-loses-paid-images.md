@@ -2,7 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-11-26
-- Source: Owner decision (plan review)
 - Related: spec §4; FR-6, FR-11; issue #9; 0009
 
 ## Context

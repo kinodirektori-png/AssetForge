@@ -2,7 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-11-26
-- Source: Owner decision
 - Related: spec §4, §8; NFR-5
 
 ## Context

@@ -2,7 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-11-26
-- Source: Owner decision (SQLite); data location from review of #4
 - Related: spec §4, §8; NFR-6, NFR-7
 
 ## Context
@@ -20,8 +19,8 @@ computer. The PNG files go on disk.
 ## Options considered
 
 - **SQL Server LocalDB or PostgreSQL.** Need an installed server; nothing the MVP needs justifies that.
-- **Database under the API project folder.** The first version did this; the review moved it out so data is not mixed
-  with source and survives a fresh clone.
+- **Database under the API project folder.** Mixes user data with source, is lost on a fresh clone, and changes with
+  the folder the app is started from.
 
 ## Consequences
 

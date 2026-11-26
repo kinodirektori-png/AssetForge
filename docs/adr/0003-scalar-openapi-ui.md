@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-11-26
-- Source: Approved with the spec. The original brief said "demoable via Swagger/Scalar"; Scalar was picked when the spec
-  was written.
 - Related: spec §1, §4, §5; 0004
 
 ## Context
@@ -22,7 +20,8 @@ or Swagger UI. The page must work with the Bearer token (0004) and must not let 
 ## Options considered
 
 - **Swagger UI** (`Swashbuckle.AspNetCore.SwaggerUI`, MIT) on the same document. Familiar and works fine; it is a
-  separate package that .NET no longer ships with. A small swap if the owner prefers it.
+  separate package that .NET no longer ships with. A reasonable alternative; it was not chosen because it adds a
+  package outside the built-in OpenAPI path and offers nothing Scalar lacks here.
 - **No UI, only the document** with an external client. Fails the "demoable" goal.
 
 ## Consequences

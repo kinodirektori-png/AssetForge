@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-11-26
-- Source: Owner decision (plan review put cross-site protection back in scope); deny-by-default token, AllowedHosts check
-  and security headers from review of #4
 - Related: spec §5; FR-14, AC-14.1 to AC-14.3; DEC-1; 0011
 
 ## Context
@@ -11,7 +9,6 @@
 The API runs on the owner's computer but spends money (model calls) and writes files (export). Listening on localhost
 is not enough: any web page open in the owner's browser can send requests to localhost, requests with no body or a
 simple body skip the CORS preflight, SQLite integer ids are easy to guess, and DNS rebinding defeats Origin checks.
-The first plan dropped this protection; the owner caught it.
 
 ## Decision
 

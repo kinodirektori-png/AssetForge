@@ -2,7 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-11-26
-- Source: Owner decision (plan review raised that export wrote to any folder named in the request)
 - Related: spec §5 item 7; FR-13 (narrowed), DEC-7; issue #11; 0004
 
 ## Context

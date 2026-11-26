@@ -2,7 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-11-26
-- Source: Approved with the spec
 - Related: spec §4; FR-11, AC-11.5, DEC-2; issue #8; 0008
 
 ## Context

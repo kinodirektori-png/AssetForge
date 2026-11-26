@@ -2,13 +2,14 @@
 
 - Status: Accepted
 - Date: 2026-11-26
-- Source: Owner decision (plan review)
 - Related: spec §4; NFR-9, FR-11, OQ-6; 0006
 
 ## Context
 
-The first plan hard-coded MAI-Image size limits and one price per megapixel. FLUX.2 [pro] has different limits (at most
-4 MP, prompt up to 32,000 tokens) and a tiered price: $0.03 for the first megapixel and $0.015 for each further one.
+The model will change after the spike (0006), and models differ in exactly the numbers the app depends on. MAI-Image
+has a minimum side and a pixel cap; FLUX.2 [pro] allows up to 4 MP and 32,000 prompt tokens, and is priced in tiers:
+$0.03 for the first megapixel and $0.015 for each further one. A single hard-coded price per megapixel cannot express
+that, and wrong limits or prices mean failed calls or a budget cap that does not hold.
 
 ## Decision
 

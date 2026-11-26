@@ -2,14 +2,13 @@
 
 - Status: Accepted
 - Date: 2026-11-26
-- Source: Owner decision (review of #4)
 - Related: spec §2 item 11; claude.md (80 % coverage)
 
 ## Context
 
-The repository requires at least 80 % line coverage. The first version used `coverlet.collector` plus Python and
-PowerShell scripts to read the report. The owner did not want low coverage to fail the build; it should stop the PR from
-being merged.
+The repository requires at least 80 % line coverage. `coverlet.collector` only writes a report, so a script had to read
+it and fail CI. Mixing coverage into the build check also hides the real signal: a red build should mean the code does
+not compile or a test fails, not that coverage dropped. Low coverage should block the merge, not the build.
 
 ## Decision
 
@@ -21,7 +20,7 @@ being merged.
 
 ## Options considered
 
-- **Keep the scripts.** Extra code to maintain; Python is not on the owner's PC.
+- **Keep the scripts.** Extra code to maintain in two languages, and Python is not available on every dev machine.
 - **A third-party GitHub Action reading the report.** CI only, no local check, an extra dependency.
 
 ## Consequences
