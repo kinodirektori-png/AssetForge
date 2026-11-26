@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 namespace AssetForge.Api.Security;
 
 /// <summary>
-/// Spec §5 layer 3: every /api request needs <c>Authorization: Bearer &lt;token&gt;</c>. A web page cannot know the token,
+/// Spec §5 layer 3: every request needs <c>Authorization: Bearer &lt;token&gt;</c>, except a short allowlist of public paths. A web page cannot know the token,
 /// and the custom header forces a CORS preflight that this API never answers. Compared in constant time, never logged.
 /// </summary>
 public sealed class ApiTokenMiddleware(RequestDelegate next, IOptions<SecurityOptions> options)
@@ -14,7 +14,7 @@ public sealed class ApiTokenMiddleware(RequestDelegate next, IOptions<SecurityOp
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (context.Request.Path.StartsWithSegments("/api") && !HasValidToken(context.Request))
+        if (!IsPublic(context.Request.Path) && !HasValidToken(context.Request))
         {
             context.Response.Headers.WWWAuthenticate = "Bearer";
             await LocalOnlyMiddleware.Problem(context, StatusCodes.Status401Unauthorized, "A valid API token is required.");
@@ -22,6 +22,13 @@ public sealed class ApiTokenMiddleware(RequestDelegate next, IOptions<SecurityOp
         }
         await next(context);
     }
+
+    /// <summary>
+    /// Deny by default: only these paths work without the token. They hold no data: the redirect to Scalar,
+    /// the OpenAPI document and the Scalar UI with its bundled assets.
+    /// </summary>
+    internal static bool IsPublic(PathString path) =>
+        path == "/" || path.StartsWithSegments("/openapi") || path.StartsWithSegments("/scalar");
 
     private bool HasValidToken(HttpRequest request)
     {

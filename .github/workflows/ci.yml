@@ -10,7 +10,11 @@ permissions:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,5 +33,11 @@ jobs:
           dotnet test AssetForge.slnx --no-build --configuration Release
           --settings coverage.runsettings --collect:"XPlat Code Coverage" --results-directory TestResults
 
-      - name: Coverage gate (80 % lines)
+      - name: Coverage gate (80 % lines, Linux)
+        if: runner.os == 'Linux'
         run: python3 scripts/check-coverage.py 80
+
+      - name: Coverage gate (80 % lines, Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/check-coverage.ps1 -Threshold 80

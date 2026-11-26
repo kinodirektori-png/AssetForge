@@ -2,7 +2,12 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using AssetForge.Tests.Support;
+using AssetForge.Api.Security;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AssetForge.Tests.Api;
 
@@ -26,6 +31,19 @@ public sealed class SecurityTests : IDisposable
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("\"ok\"", await response.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData("localhost")]
+    [InlineData("127.0.0.1")]
+    [InlineData("localhost;127.0.0.1")]
+    [InlineData(" LOCALHOST ")]
+    public void App_starts_with_local_allowed_hosts(string allowedHosts)
+    {
+        using var factory = new ApiFactory();
+        factory.Settings["AllowedHosts"] = allowedHosts;
+
+        using var client = factory.CreateClient();
     }
 
     [Fact]
@@ -52,15 +70,85 @@ public sealed class SecurityTests : IDisposable
     }
 
     [Fact]
-    public async Task Token_is_not_needed_outside_api_but_never_leaks_data_there()
+    public async Task Allowlisted_public_paths_work_without_token()
     {
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
         var root = await client.GetAsync("/");
         var openApi = await client.GetAsync("/openapi/v1.json");
+        var scalar = await client.GetAsync("/scalar/v1");
 
         Assert.Equal("/scalar/v1", root.Headers.Location?.ToString());
         Assert.Equal(HttpStatusCode.OK, openApi.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, scalar.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/openapi/v1.json")]
+    [InlineData("/scalar")]
+    [InlineData("/scalar/v1")]
+    [InlineData("/scalar/scalar.js")]
+    public void Public_allowlist_is_exactly_root_openapi_and_scalar(string path)
+    {
+        Assert.True(ApiTokenMiddleware.IsPublic(path));
+    }
+
+    [Theory]
+    [InlineData("/api/status")]
+    [InlineData("/images/123/file")]
+    [InlineData("/health")]
+    [InlineData("/openapix")]
+    [InlineData("/scalarx/v1")]
+    [InlineData("/x/openapi")]
+    public void Everything_else_needs_the_token(string path)
+    {
+        Assert.False(ApiTokenMiddleware.IsPublic(path));
+    }
+
+    [Fact]
+    public async Task Every_mapped_endpoint_outside_the_allowlist_returns_401_without_token()
+    {
+        // Deny by default: a new endpoint anywhere is protected unless it is deliberately made public.
+        var endpoints = _factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().ToList();
+        var client = _factory.CreateClient();
+        var checkedRoutes = new List<string>();
+
+        foreach (var endpoint in endpoints)
+        {
+            string path = "/" + string.Join("/", endpoint.RoutePattern.PathSegments.Select(segment =>
+                string.Concat(segment.Parts.Select(part => part switch
+                {
+                    RoutePatternLiteralPart literal => literal.Content,
+                    RoutePatternParameterPart => Guid.NewGuid().ToString(),
+                    _ => "x",
+                }))));
+            if (ApiTokenMiddleware.IsPublic(path))
+                continue;
+
+            var methods = endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["GET"];
+            foreach (var method in methods)
+            {
+                using var request = new HttpRequestMessage(new HttpMethod(method), path);
+                if (method is "POST" or "PUT" or "PATCH")
+                    request.Content = JsonBody();
+
+                var response = await client.SendAsync(request);
+
+                Assert.True(response.StatusCode == HttpStatusCode.Unauthorized, $"{method} {path} returned {(int)response.StatusCode} without a token.");
+                checkedRoutes.Add($"{method} {path}");
+            }
+        }
+
+        Assert.Contains("GET /api/status", checkedRoutes);
+    }
+
+    [Theory]
+    [InlineData("/not-mapped")]
+    [InlineData("/data/assetforge.db")]
+    public async Task Unmapped_paths_also_need_the_token(string path)
+    {
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().GetAsync(path)).StatusCode);
     }
 
     [Fact]
@@ -223,8 +311,11 @@ public sealed class SecurityTests : IDisposable
     [Theory]
     [InlineData("*")]
     [InlineData("localhost;*")]
+    [InlineData("localhost;evil.example")]
+    [InlineData("localhost;[::1]")]
     [InlineData("")]
-    public void App_does_not_start_with_open_allowed_hosts(string allowedHosts)
+    [InlineData(";")]
+    public void App_does_not_start_with_any_host_but_localhost_and_127_0_0_1(string allowedHosts)
     {
         using var factory = new ApiFactory();
         factory.Settings["AllowedHosts"] = allowedHosts;

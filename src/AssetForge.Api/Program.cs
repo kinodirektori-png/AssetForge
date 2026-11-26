@@ -17,7 +17,7 @@ builder.WebHost.ConfigureKestrel(k => k.ListenLocalhost(port));
 
 builder.Services.Configure<SecurityOptions>(builder.Configuration.GetSection(SecurityOptions.Section));
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.ContentRootPath);
+builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<AppExceptionHandler>();
@@ -48,6 +48,7 @@ using (var scope = app.Services.CreateScope())
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 // Spec §5 layer 2 (host filtering on AllowedHosts) is added by the host before this point.
+app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<LocalOnlyMiddleware>();
 app.UseMiddleware<ApiTokenMiddleware>();
 

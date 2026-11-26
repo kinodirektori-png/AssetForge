@@ -14,4 +14,8 @@
     <ProjectReference Include="..\AssetForge.Infrastructure\AssetForge.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="AssetForge.Tests" />
+  </ItemGroup>
+
 </Project>

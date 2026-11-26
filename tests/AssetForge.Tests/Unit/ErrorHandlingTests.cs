@@ -3,6 +3,7 @@ using AssetForge.Api;
 using AssetForge.Application;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssetForge.Tests.Unit;
@@ -10,13 +11,13 @@ namespace AssetForge.Tests.Unit;
 /// <summary>Errors become ProblemDetails with safe messages and no stack traces (claude.md).</summary>
 public sealed class ErrorHandlingTests
 {
-    private static async Task<(int Status, JsonElement Body)> Handle(Exception exception)
+    private static async Task<(int Status, JsonElement Body)> Handle(Exception exception, ILogger<AppExceptionHandler>? logger = null)
     {
         var services = new ServiceCollection().AddLogging().AddProblemDetails().BuildServiceProvider();
         var context = new DefaultHttpContext { RequestServices = services };
         context.Response.Body = new MemoryStream();
 
-        bool handled = await new AppExceptionHandler(NullLogger<AppExceptionHandler>.Instance)
+        bool handled = await new AppExceptionHandler(logger ?? NullLogger<AppExceptionHandler>.Instance)
             .TryHandleAsync(context, exception, CancellationToken.None);
 
         Assert.True(handled);
@@ -70,5 +71,37 @@ public sealed class ErrorHandlingTests
         Assert.DoesNotContain("secret detail", text);
         Assert.DoesNotContain("InvalidOperationException", text);
         Assert.Equal("An unexpected error occurred.", body.GetProperty("title").GetString());
+    }
+
+    [Fact]
+    public async Task Unexpected_error_is_logged_with_its_exception_for_diagnosis()
+    {
+        var logger = new CapturingLogger();
+        var exception = new InvalidOperationException("boom");
+
+        await Handle(exception, logger);
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Error, entry.Level);
+        Assert.Same(exception, entry.Exception);
+    }
+
+    [Fact]
+    public async Task Expected_errors_are_not_logged_as_errors()
+    {
+        var logger = new CapturingLogger();
+
+        await Handle(new NotFoundException("Project"), logger);
+
+        Assert.Empty(logger.Entries);
+    }
+
+    private sealed class CapturingLogger : ILogger<AppExceptionHandler>
+    {
+        public List<(LogLevel Level, Exception? Exception)> Entries { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, exception));
     }
 }

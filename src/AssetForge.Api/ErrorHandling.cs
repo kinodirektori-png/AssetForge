@@ -22,7 +22,9 @@ public sealed class AppExceptionHandler(ILogger<AppExceptionHandler> logger) : I
 
     private IResult Unexpected(Exception exception)
     {
-        logger.LogError("Unhandled {ExceptionType}", exception.GetType().Name);
+        // The stack trace goes to the local log for diagnosis; the client only gets a generic message.
+        // Exceptions must not carry keys, tokens or full prompts in their messages (claude.md).
+        logger.LogError(exception, "Unhandled {ExceptionType}", exception.GetType().Name);
         return Results.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "An unexpected error occurred.");
     }
 }
