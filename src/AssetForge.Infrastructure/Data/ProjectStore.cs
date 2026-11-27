@@ -40,10 +40,13 @@ public sealed class ProjectStore(AppDbContext db) : IProjectStore
         }
     }
 
-    public async Task SaveStyleGuideAsync(Guid projectId, StyleGuide styleGuide, CancellationToken ct)
+    public async Task<bool> SaveStyleGuideAsync(Guid projectId, StyleGuide styleGuide, CancellationToken ct)
     {
-        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, ct) ?? throw new NotFoundException("The project");
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, ct);
+        if (project is null)
+            return false;
         project.StyleGuide = styleGuide;
         await db.SaveChangesAsync(ct);
+        return true;
     }
 }

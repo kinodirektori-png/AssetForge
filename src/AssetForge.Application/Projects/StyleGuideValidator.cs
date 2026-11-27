@@ -56,9 +56,9 @@ public static partial class StyleGuideValidator
         for (int i = 0; i < input.Count; i++)
         {
             string term = input[i]?.Trim() ?? "";
-            if (TextLength.Exceeds(term, StyleGuide.MaxAvoidTermLength))
-                errors.Add($"{key}[{i}]", $"Each term must be at most {StyleGuide.MaxAvoidTermLength} characters.");
-            else if (term.Length > 0)
+            if (errors.CheckLength($"{key}[{i}]", "Each term", term, StyleGuide.MaxAvoidTermLength))
+                continue;
+            if (term.Length > 0)
                 avoid.Add(term);
         }
         if (input.Count(t => !string.IsNullOrWhiteSpace(t)) > StyleGuide.MaxAvoidTerms)
@@ -69,8 +69,8 @@ public static partial class StyleGuideValidator
     private static string? Text(string? value, string property, int max, ValidationErrors errors)
     {
         string? trimmed = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-        if (trimmed is not null && TextLength.Exceeds(trimmed, max))
-            errors.Add(ValidationErrors.Key(property), $"{ValidationErrors.Label(property)} must be at most {max} characters.");
+        if (trimmed is not null)
+            errors.CheckLength(ValidationErrors.Key(property), ValidationErrors.Label(property), trimmed, max);
         return trimmed;
     }
 

@@ -6,13 +6,16 @@ public sealed class ProjectService(IProjectStore store, TimeProvider clock)
     public async Task<ProjectDto> CreateAsync(string? name, CancellationToken ct)
     {
         string clean = ProjectNameValidator.Validate(name);
-        if (await store.NameExistsAsync(Project.Normalize(clean), ct))
-            throw new ConflictException($"A project named \"{clean}\" already exists.");
 
         string slug = Slugs.From(clean, "project");
-        slug = Slugs.MakeUnique(slug, (await store.SlugsStartingWithAsync(Slugs.SharedPrefix(slug), ct)).ToHashSet());
+        var taken = (await store.SlugsStartingWithAsync(Slugs.SharedPrefix(slug), ct)).ToHashSet();
+        slug = Slugs.MakeUnique(slug, taken)
+            ?? throw new ConflictException("Too many projects have a name like this one. Choose a different name.");
 
         var project = Project.Create(clean, slug, clock.GetUtcNow());
+        if (await store.NameExistsAsync(project.NormalizedName, ct))
+            throw new ConflictException($"A project named \"{project.Name}\" already exists.");
+
         await store.AddAsync(project, ct);
         return ToDto(project);
     }
@@ -28,7 +31,8 @@ public sealed class ProjectService(IProjectStore store, TimeProvider clock)
     public async Task<StyleGuideDto> SaveStyleGuideAsync(Guid projectId, StyleGuideInput input, CancellationToken ct)
     {
         var guide = StyleGuideValidator.Validate(input, clock.GetUtcNow());
-        await store.SaveStyleGuideAsync(projectId, guide, ct);
+        if (!await store.SaveStyleGuideAsync(projectId, guide, ct))
+            throw NotFound();
         return ToDto(guide);
     }
 

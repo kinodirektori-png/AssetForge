@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace AssetForge.Application.Projects;
+namespace AssetForge.Application;
 
 /// <summary>
 /// How long a text is, as a person counts it (FR-1, FR-2): an emoji or a letter with an accent is one character.
@@ -18,10 +18,12 @@ public static class TextLength
 
     /// <summary>
     /// Stacked combining marks also count as one character, so the size in UTF-16 units is capped as well, or one
-    /// "character" could be megabytes.
+    /// "character" could be megabytes. The two limits are told apart in <see cref="TextLimit"/>.
     /// </summary>
-    public static bool Exceeds(string value, int maxCharacters) =>
-        value.Length > maxCharacters * MaxUnitsPerCharacter || new StringInfo(value).LengthInTextElements > maxCharacters;
+    public static TextLimit Check(string value, int maxCharacters) =>
+        value.Length > maxCharacters * MaxUnitsPerCharacter ? TextLimit.TooLarge   // cheap test first, before scanning
+        : new StringInfo(value).LengthInTextElements > maxCharacters ? TextLimit.TooManyCharacters
+        : TextLimit.Within;
 
     /// <summary>Cuts a long value for an error message, on whole characters, never through a surrogate pair or a letter and its accent.</summary>
     public static string Shorten(string value)
@@ -29,4 +31,11 @@ public static class TextLength
         var info = new StringInfo(value);
         return info.LengthInTextElements <= ShortenedLength ? value : info.SubstringByTextElements(0, ShortenedLength) + "…";
     }
+}
+
+public enum TextLimit
+{
+    Within,
+    TooManyCharacters,
+    TooLarge,
 }

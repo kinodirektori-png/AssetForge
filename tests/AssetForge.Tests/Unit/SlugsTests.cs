@@ -41,7 +41,7 @@ public sealed class SlugsTests
     {
         string full = new string('a', Slugs.MaxLength);
 
-        string unique = Slugs.MakeUnique(full, new HashSet<string> { full });
+        string? unique = Slugs.MakeUnique(full, new HashSet<string> { full });
 
         Assert.Equal(new string('a', Slugs.MaxLength - 2) + "-2", unique);
     }
@@ -53,17 +53,17 @@ public sealed class SlugsTests
         string prefix = Slugs.SharedPrefix(full);
 
         Assert.StartsWith(prefix, Slugs.MakeUnique(full, new HashSet<string> { full }));
-        Assert.StartsWith(prefix, new string('a', Slugs.MaxLength - Slugs.MaxSuffixLength) + "-9999");
+        Assert.StartsWith(prefix, Slugs.MakeUnique(full, new HashSet<string> { full, full[..^2] + "-2" })!);
         Assert.Equal(new string('b', 24), Slugs.SharedPrefix(new string('b', 24) + "-" + new string('c', 10)));
         Assert.Equal("short", Slugs.SharedPrefix("short"));
     }
 
     [Fact]
-    public void Giving_up_after_9999_variants_is_a_conflict_not_an_endless_loop()
+    public void Giving_up_after_9999_variants_returns_null_not_an_endless_loop()
     {
         var taken = Enumerable.Range(2, 9998).Select(n => $"dungeon-{n}").Append("dungeon").ToHashSet();
 
-        Assert.Throws<AssetForge.Application.ConflictException>(() => Slugs.MakeUnique("dungeon", taken));
+        Assert.Null(Slugs.MakeUnique("dungeon", taken));
         Assert.Equal("dungeon-9999", Slugs.MakeUnique("dungeon", taken.Where(t => t != "dungeon-9999").ToHashSet()));
     }
 }

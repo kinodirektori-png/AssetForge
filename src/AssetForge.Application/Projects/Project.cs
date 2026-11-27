@@ -29,7 +29,7 @@ public sealed class Project
         {
             Id = Guid.CreateVersion7(),
             Name = clean,
-            NormalizedName = Normalize(clean),
+            NormalizedName = clean.ToUpperInvariant(),
             Slug = slug,
             CreatedAt = now,
         };
@@ -37,7 +37,4 @@ public sealed class Project
 
     /// <summary>Unicode form C and trimmed, so names that look the same are stored the same (AC-1.4).</summary>
     public static string Clean(string? name) => name?.Normalize(NormalizationForm.FormC).Trim() ?? "";
-
-    /// <summary>The comparison key for a name: <see cref="Clean"/>, then upper case.</summary>
-    public static string Normalize(string? name) => Clean(name).ToUpperInvariant();
 }

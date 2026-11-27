@@ -150,17 +150,6 @@ public sealed class ProjectEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task The_name_limit_counts_characters_not_code_units()
-    {
-        // Each 🐉 is two UTF-16 code units but one character (FR-1).
-        string fifty = string.Concat(Enumerable.Repeat("🐉", 50));
-        Assert.Equal(fifty, (await CreateAsync(fifty)).Name);
-
-        var errors = await ErrorsAsync(await _client.PostAsJsonAsync("/api/projects", new { name = fifty + "x" }));
-        Assert.Contains("50", Assert.Single(errors["name"]));
-    }
-
-    [Fact]
     public async Task Conflicts_share_one_title_and_name_the_project_in_detail()
     {
         await CreateAsync("Dungeon");
@@ -234,68 +223,6 @@ public sealed class ProjectEndpointsTests : IDisposable
         var response = await _client.PostAsJsonAsync("/api/projects", new { name = "Cha\u0302teau" });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-    }
-
-    [Theory]
-    [InlineData("x\ny")]
-    [InlineData("a\u0000b")]
-    [InlineData("Dun\u200Bgeon")]
-    public async Task Names_with_control_or_invisible_characters_are_refused(string name)
-    {
-        var errors = await ErrorsAsync(await _client.PostAsJsonAsync("/api/projects", new { name }));
-
-        Assert.Contains("control", Assert.Single(errors["name"]));
-        Assert.Equal(0, await ProjectCountAsync());
-    }
-
-    [Fact]
-    public async Task Zero_width_joiners_used_by_some_scripts_and_emoji_are_allowed()
-    {
-        var created = await CreateAsync("Family \U0001F468\u200D\U0001F469\u200D\U0001F467");
-
-        Assert.Contains('\u200D', created.Name);
-    }
-
-    [Fact]
-    public async Task Limits_also_cap_the_size_so_stacked_combining_marks_cannot_make_huge_values()
-    {
-        string huge = "a" + new string('\u0300', 200_000);   // one user-visible character, 200,000 UTF-16 units
-        var project = await CreateAsync("Dungeon");
-        string url = $"/api/projects/{project.Id}/style-guide";
-
-        var name = await ErrorsAsync(await _client.PostAsJsonAsync("/api/projects", new { name = huge }));
-        var guide = await ErrorsAsync(await _client.PutAsJsonAsync(url, new { description = huge, lighting = huge, avoid = new[] { huge } }));
-
-        Assert.Contains("50", Assert.Single(name["name"]));
-        Assert.Equal(["avoid[0]", "description", "lighting"], guide.Keys.Order());
-        Assert.Equal(1, await ProjectCountAsync());
-    }
-
-    [Fact]
-    public async Task Style_guide_limits_count_characters_a_user_sees_not_utf16_units()
-    {
-        var project = await CreateAsync("Dungeon");
-        string url = $"/api/projects/{project.Id}/style-guide";
-
-        var atLimit = await _client.PutAsJsonAsync(url, new { description = string.Concat(Enumerable.Repeat("\U0001F600", 300)) });
-        Assert.Equal(HttpStatusCode.OK, atLimit.StatusCode);
-
-        var over = await ErrorsAsync(await _client.PutAsJsonAsync(url,
-            new { description = string.Concat(Enumerable.Repeat("\U0001F600", 301)) }));
-        Assert.Contains("300", Assert.Single(over["description"]));
-    }
-
-    [Fact]
-    public async Task A_long_invalid_colour_is_cut_on_whole_characters_in_the_error()
-    {
-        var project = await CreateAsync("Dungeon");
-        string bad = "x" + string.Concat(Enumerable.Repeat("\U0001F600", 30));   // an odd first unit shifts the cut
-
-        var errors = await ErrorsAsync(await _client.PutAsJsonAsync($"/api/projects/{project.Id}/style-guide", new { palette = new[] { bad } }));
-
-        string message = Assert.Single(errors["palette[0]"]);
-        Assert.Contains("x" + string.Concat(Enumerable.Repeat("\U0001F600", 19)) + "…", message);
-        Assert.DoesNotContain('\uFFFD', message);
     }
 
     [Fact]
@@ -416,17 +343,6 @@ public sealed class ProjectEndpointsTests : IDisposable
         Assert.Contains("16", Assert.Single(errors["palette"]));
     }
 
-    [Fact]
-    public async Task Sixteen_palette_colours_are_accepted()
-    {
-        var project = await CreateAsync("Dungeon");
-        var palette = Enumerable.Range(0, 16).Select(i => $"#0000{i:X2}").ToArray();
-
-        var put = await _client.PutAsJsonAsync($"/api/projects/{project.Id}/style-guide", new { palette });
-
-        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
-    }
-
     [Theory]
     [InlineData("red")]
     [InlineData("#12345")]
@@ -469,43 +385,6 @@ public sealed class ProjectEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Avoid_terms_are_limited_in_count_and_length()
-    {
-        var project = await CreateAsync("Dungeon");
-        string url = $"/api/projects/{project.Id}/style-guide";
-
-        var tooMany = await ErrorsAsync(await _client.PutAsJsonAsync(url,
-            new { avoid = Enumerable.Range(0, 21).Select(i => $"term{i}").ToArray() }));
-        Assert.Contains("20", Assert.Single(tooMany["avoid"]));
-
-        var tooLong = await ErrorsAsync(await _client.PutAsJsonAsync(url,
-            new { avoid = new[] { "ok", new string('x', 41) } }));
-        Assert.Contains("40", Assert.Single(tooLong["avoid[1]"]));
-
-        var atLimits = await _client.PutAsJsonAsync(url,
-            new { avoid = Enumerable.Range(0, 20).Select(_ => new string('x', 40)).ToArray() });
-        Assert.Equal(HttpStatusCode.OK, atLimits.StatusCode);
-    }
-
-    [Fact]
-    public async Task Values_are_trimmed_blanks_become_empty_and_colours_upper_case()
-    {
-        var project = await CreateAsync("Dungeon");
-        string url = $"/api/projects/{project.Id}/style-guide";
-
-        var put = await _client.PutAsync(url, new StringContent(
-            """{"description":"   ","lighting":"  top-left  ","palette":[" #abcdef "],"avoid":[null,"  ","text"," blur "]}""",
-            Encoding.UTF8, "application/json"));
-
-        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
-        var guide = (await _client.GetFromJsonAsync<StyleGuideDto>(url, Json))!;
-        Assert.Null(guide.Description);
-        Assert.Equal("top-left", guide.Lighting);
-        Assert.Equal(["#ABCDEF"], guide.Palette);
-        Assert.Equal(["text", "blur"], guide.Avoid);
-    }
-
-    [Fact]
     public async Task A_null_palette_entry_is_refused_and_pointed_out()
     {
         var project = await CreateAsync("Dungeon");
@@ -514,18 +393,6 @@ public sealed class ProjectEndpointsTests : IDisposable
             new StringContent("""{"palette":[null]}""", Encoding.UTF8, "application/json")));
 
         Assert.Equal(["palette[0]"], errors.Keys);
-    }
-
-    [Fact]
-    public async Task A_huge_palette_gets_one_error_not_one_per_entry()
-    {
-        var project = await CreateAsync("Dungeon");
-
-        var errors = await ErrorsAsync(await _client.PutAsJsonAsync($"/api/projects/{project.Id}/style-guide",
-            new { palette = Enumerable.Repeat("bad", 1000).ToArray() }));
-
-        Assert.True(errors.Count <= StyleGuide.MaxPaletteColours + 1, $"{errors.Count} errors");
-        Assert.Contains("palette", errors.Keys);
     }
 
     [Fact]

@@ -40,10 +40,10 @@ public static class Slugs
         slug.Length <= MaxLength - MaxSuffixLength ? slug : slug[..(MaxLength - MaxSuffixLength)].TrimEnd('-');
 
     /// <summary>
-    /// Appends -2, -3 ... until the slug is not in <paramref name="taken"/>. Gives up with a
-    /// <see cref="ConflictException"/> after <c>-9999</c>, so the loop always ends.
+    /// Appends -2, -3 ... until the slug is not in <paramref name="taken"/>. Returns <c>null</c> when <c>-9999</c> is
+    /// taken too, so the loop always ends.
     /// </summary>
-    public static string MakeUnique(string slug, IReadOnlySet<string> taken)
+    public static string? MakeUnique(string slug, IReadOnlySet<string> taken)
     {
         if (!taken.Contains(slug))
             return slug;
@@ -54,6 +54,6 @@ public static class Slugs
             if (!taken.Contains(candidate))
                 return candidate;
         }
-        throw new ConflictException("Too many projects have a name like this one. Choose a different name.");
+        return null;
     }
 }

@@ -15,6 +15,6 @@ public interface IProjectStore
     /// <summary>Adds the project. Throws <see cref="ConflictException"/> if its name is already taken.</summary>
     Task AddAsync(Project project, CancellationToken ct);
 
-    /// <summary>Replaces the style guide of a project. Throws <see cref="NotFoundException"/> if there is no such project.</summary>
-    Task SaveStyleGuideAsync(Guid projectId, StyleGuide styleGuide, CancellationToken ct);
+    /// <summary>Replaces the style guide of a project. Returns <c>false</c> if there is no such project.</summary>
+    Task<bool> SaveStyleGuideAsync(Guid projectId, StyleGuide styleGuide, CancellationToken ct);
 }

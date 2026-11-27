@@ -89,12 +89,12 @@ public sealed class ProjectStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Saving_a_style_guide_for_an_unknown_project_is_not_found()
+    public async Task Saving_a_style_guide_for_an_unknown_project_is_reported_as_not_saved()
     {
         using var scope = _factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
 
-        await Assert.ThrowsAsync<NotFoundException>(() => store.SaveStyleGuideAsync(Guid.NewGuid(), new StyleGuide(), Ct));
+        Assert.False(await store.SaveStyleGuideAsync(Guid.NewGuid(), new StyleGuide(), Ct));
     }
 
     [Fact]
