@@ -32,7 +32,7 @@ public static partial class StyleGuideValidator
 
     private static List<string> Palette(IReadOnlyList<string?> input, ValidationErrors errors)
     {
-        string key = ValidationErrors.Key(nameof(StyleGuideInput.Palette));
+        string key = nameof(StyleGuideInput.Palette);
         if (input.Count > StyleGuide.MaxPaletteColours)
             errors.Add(key, $"At most {StyleGuide.MaxPaletteColours} colours are allowed.");
 
@@ -51,12 +51,12 @@ public static partial class StyleGuideValidator
     /// <summary>Blank terms are dropped; error keys use the index the caller sent.</summary>
     private static List<string> Avoid(IReadOnlyList<string?> input, ValidationErrors errors)
     {
-        string key = ValidationErrors.Key(nameof(StyleGuideInput.Avoid));
+        string key = nameof(StyleGuideInput.Avoid);
         var avoid = new List<string>();
         for (int i = 0; i < input.Count; i++)
         {
             string term = input[i]?.Trim() ?? "";
-            if (errors.CheckLength($"{key}[{i}]", "Each term", term, StyleGuide.MaxAvoidTermLength))
+            if (errors.TryAddLengthError($"{key}[{i}]", "Each term", term, StyleGuide.MaxAvoidTermLength))
                 continue;
             if (term.Length > 0)
                 avoid.Add(term);
@@ -70,7 +70,7 @@ public static partial class StyleGuideValidator
     {
         string? trimmed = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         if (trimmed is not null)
-            errors.CheckLength(ValidationErrors.Key(property), ValidationErrors.Label(property), trimmed, max);
+            errors.TryAddLengthError(property, ValidationErrors.Label(property), trimmed, max);
         return trimmed;
     }
 

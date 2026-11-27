@@ -6,6 +6,8 @@ public sealed class ProjectService(IProjectStore store, TimeProvider clock)
     public async Task<ProjectDto> CreateAsync(string? name, CancellationToken ct)
     {
         string clean = ProjectNameValidator.Validate(name);
+        if (await store.NameExistsAsync(Project.NameKey(clean), ct))
+            throw NameTaken(clean);
 
         string slug = Slugs.From(clean, "project");
         var taken = (await store.SlugsStartingWithAsync(Slugs.SharedPrefix(slug), ct)).ToHashSet();
@@ -13,12 +15,15 @@ public sealed class ProjectService(IProjectStore store, TimeProvider clock)
             ?? throw new ConflictException("Too many projects have a name like this one. Choose a different name.");
 
         var project = Project.Create(clean, slug, clock.GetUtcNow());
-        if (await store.NameExistsAsync(project.NormalizedName, ct))
-            throw new ConflictException($"A project named \"{project.Name}\" already exists.");
-
-        await store.AddAsync(project, ct);
-        return ToDto(project);
+        return await store.AddAsync(project, ct) switch
+        {
+            AddResult.Added => ToDto(project),
+            AddResult.NameTaken => throw NameTaken(clean),
+            _ => throw new ConflictException("Another project was created at the same moment. Try again."),
+        };
     }
+
+    private static ConflictException NameTaken(string name) => new($"A project named \"{name}\" already exists.");
 
     public async Task<IReadOnlyList<ProjectDto>> ListAsync(CancellationToken ct) =>
         [.. (await store.ListAsync(ct)).Select(ToDto)];

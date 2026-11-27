@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AssetForge.Application;
 using AssetForge.Application.Projects;
 
@@ -15,7 +14,7 @@ public sealed class StyleGuideValidatorTests
         Assert.Throws<ValidationFailedException>(() => StyleGuideValidator.Validate(input, Now)).Errors;
 
     [Fact]
-    public void Error_keys_match_the_json_property_names_and_messages_use_words()
+    public void Error_keys_are_the_property_names_and_messages_use_words()
     {
         var input = new StyleGuideInput(
             Description: new string('x', 301), Perspective: new string('x', 101), Lighting: new string('x', 101),
@@ -23,11 +22,10 @@ public sealed class StyleGuideValidatorTests
 
         var errors = Errors(input);
 
-        var jsonNames = typeof(StyleGuideInput).GetProperties()
-            .Select(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name))
-            .Where(n => n is not ("palette" or "avoid"));
-        Assert.Equal(jsonNames.Order(), errors.Keys.Order());
-        Assert.Equal("Detail level must be at most 100 characters.", Assert.Single(errors["detailLevel"]));
+        var propertyNames = typeof(StyleGuideInput).GetProperties().Select(p => p.Name)
+            .Where(n => n is not (nameof(StyleGuideInput.Palette) or nameof(StyleGuideInput.Avoid)));
+        Assert.Equal(propertyNames.Order(), errors.Keys.Order());
+        Assert.Equal("Detail level must be at most 100 characters.", Assert.Single(errors["DetailLevel"]));
     }
 
     [Fact]
@@ -60,7 +58,7 @@ public sealed class StyleGuideValidatorTests
         var errors = Errors(new StyleGuideInput(Palette: [.. Enumerable.Repeat("bad", 1000)]));
 
         Assert.True(errors.Count <= StyleGuide.MaxPaletteColours + 1, $"{errors.Count} errors");
-        Assert.Contains("palette", errors.Keys);
+        Assert.Contains("Palette", errors.Keys);
     }
 
     [Fact]
@@ -68,14 +66,14 @@ public sealed class StyleGuideValidatorTests
     {
         var errors = Errors(new StyleGuideInput(Palette: ["#112233", "nope", null], Avoid: ["ok", new string('y', 41)]));
 
-        Assert.Equal(["avoid[1]", "palette[1]", "palette[2]"], errors.Keys.Order());
+        Assert.Equal(["Avoid[1]", "Palette[1]", "Palette[2]"], errors.Keys.Order());
     }
 
     [Fact]
     public void Avoid_terms_are_limited_in_count_and_length()
     {
-        Assert.Contains("20", Assert.Single(Errors(new StyleGuideInput(Avoid: [.. Enumerable.Range(0, 21).Select(i => $"term{i}")]))["avoid"]));
-        Assert.Contains("40", Assert.Single(Errors(new StyleGuideInput(Avoid: ["ok", new string('x', 41)]))["avoid[1]"]));
+        Assert.Contains("20", Assert.Single(Errors(new StyleGuideInput(Avoid: [.. Enumerable.Range(0, 21).Select(i => $"term{i}")]))["Avoid"]));
+        Assert.Contains("40", Assert.Single(Errors(new StyleGuideInput(Avoid: ["ok", new string('x', 41)]))["Avoid[1]"]));
         Assert.Equal(20, Valid(new StyleGuideInput(Avoid: [.. Enumerable.Repeat(new string('x', 40), 20)])).Avoid.Count);
     }
 
@@ -85,7 +83,7 @@ public sealed class StyleGuideValidatorTests
         string smiles300 = string.Concat(Enumerable.Repeat("\U0001F600", 300));
 
         Assert.Equal(smiles300, Valid(new StyleGuideInput(Description: smiles300)).Description);
-        Assert.Contains("300", Assert.Single(Errors(new StyleGuideInput(Description: smiles300 + "\U0001F600"))["description"]));
+        Assert.Contains("300", Assert.Single(Errors(new StyleGuideInput(Description: smiles300 + "\U0001F600"))["Description"]));
     }
 
     [Fact]
@@ -95,9 +93,9 @@ public sealed class StyleGuideValidatorTests
 
         var errors = Errors(new StyleGuideInput(Description: huge, Lighting: huge, Avoid: [huge]));
 
-        Assert.Equal(["avoid[0]", "description", "lighting"], errors.Keys.Order());
-        Assert.Equal("Description is too large.", Assert.Single(errors["description"]));
-        Assert.Equal("Each term is too large.", Assert.Single(errors["avoid[0]"]));
+        Assert.Equal(["Avoid[0]", "Description", "Lighting"], errors.Keys.Order());
+        Assert.Equal("Description is too large.", Assert.Single(errors["Description"]));
+        Assert.Equal("Each term is too large.", Assert.Single(errors["Avoid[0]"]));
     }
 
     [Fact]
@@ -105,7 +103,7 @@ public sealed class StyleGuideValidatorTests
     {
         string bad = "x" + string.Concat(Enumerable.Repeat("\U0001F600", 30));   // an odd first unit shifts the cut
 
-        string message = Assert.Single(Errors(new StyleGuideInput(Palette: [bad]))["palette[0]"]);
+        string message = Assert.Single(Errors(new StyleGuideInput(Palette: [bad]))["Palette[0]"]);
 
         Assert.Contains("x" + string.Concat(Enumerable.Repeat("\U0001F600", 19)) + "…", message);
         Assert.DoesNotContain('�', message);

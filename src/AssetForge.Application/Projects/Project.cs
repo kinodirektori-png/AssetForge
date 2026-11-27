@@ -29,11 +29,14 @@ public sealed class Project
         {
             Id = Guid.CreateVersion7(),
             Name = clean,
-            NormalizedName = clean.ToUpperInvariant(),
+            NormalizedName = NameKey(clean),
             Slug = slug,
             CreatedAt = now,
         };
     }
+
+    /// <summary>The comparison key for a cleaned name: upper case, so names are unique ignoring case (AC-1.4).</summary>
+    public static string NameKey(string cleanName) => cleanName.ToUpperInvariant();
 
     /// <summary>Unicode form C and trimmed, so names that look the same are stored the same (AC-1.4).</summary>
     public static string Clean(string? name) => name?.Normalize(NormalizationForm.FormC).Trim() ?? "";

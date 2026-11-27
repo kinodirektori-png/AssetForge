@@ -5,19 +5,23 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace AssetForge.Tests.Unit;
 
 /// <summary>Errors become ProblemDetails with safe messages and no stack traces (claude.md).</summary>
 public sealed class ErrorHandlingTests
 {
-    private static async Task<(int Status, JsonElement Body)> Handle(Exception exception, ILogger<AppExceptionHandler>? logger = null)
+    private static async Task<(int Status, JsonElement Body)> Handle(
+        Exception exception, ILogger<AppExceptionHandler>? logger = null, JsonNamingPolicy? naming = null, bool useDefaultNaming = true)
     {
+        var json = Options.Create(new Microsoft.AspNetCore.Http.Json.JsonOptions());
+        json.Value.SerializerOptions.PropertyNamingPolicy = useDefaultNaming ? JsonNamingPolicy.CamelCase : naming;
         var services = new ServiceCollection().AddLogging().AddProblemDetails().BuildServiceProvider();
         var context = new DefaultHttpContext { RequestServices = services };
         context.Response.Body = new MemoryStream();
 
-        bool handled = await new AppExceptionHandler(logger ?? NullLogger<AppExceptionHandler>.Instance)
+        bool handled = await new AppExceptionHandler(logger ?? NullLogger<AppExceptionHandler>.Instance, json)
             .TryHandleAsync(context, exception, CancellationToken.None);
 
         Assert.True(handled);
@@ -29,10 +33,24 @@ public sealed class ErrorHandlingTests
     [Fact]
     public async Task Validation_errors_are_400_with_field_errors()
     {
-        var (status, body) = await Handle(new ValidationFailedException("name", "Name is required."));
+        var (status, body) = await Handle(new ValidationFailedException("Name", "Name is required."));
 
         Assert.Equal(400, status);
         Assert.Equal("Name is required.", body.GetProperty("errors").GetProperty("name")[0].GetString());
+    }
+
+    [Fact]
+    public async Task Validation_keys_follow_the_naming_policy_of_the_json_options_and_keep_the_index()
+    {
+        var errors = new Dictionary<string, string[]> { ["DetailLevel"] = ["a"], ["Palette[1]"] = ["b"] };
+
+        var (_, camel) = await Handle(new ValidationFailedException(errors));
+        var (_, snake) = await Handle(new ValidationFailedException(errors), naming: JsonNamingPolicy.SnakeCaseLower, useDefaultNaming: false);
+        var (_, plain) = await Handle(new ValidationFailedException(errors), useDefaultNaming: false);
+
+        Assert.Equal(["detailLevel", "palette[1]"], camel.GetProperty("errors").EnumerateObject().Select(p => p.Name).Order());
+        Assert.Equal(["detail_level", "palette[1]"], snake.GetProperty("errors").EnumerateObject().Select(p => p.Name).Order());
+        Assert.Equal(["DetailLevel", "Palette[1]"], plain.GetProperty("errors").EnumerateObject().Select(p => p.Name).Order());
     }
 
     [Fact]

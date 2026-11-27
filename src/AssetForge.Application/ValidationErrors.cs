@@ -19,16 +19,10 @@ internal sealed class ValidationErrors
     }
 
     /// <summary>
-    /// The JSON name of a property: <c>DetailLevel</c> becomes <c>detailLevel</c>. Use with <c>nameof</c>. The API uses the
-    /// web defaults of System.Text.Json, which name properties the same way.
-    /// </summary>
-    public static string Key(string property) => System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(property);
-
-    /// <summary>
     /// Adds an error when <paramref name="value"/> is over its limit and returns whether it did. A value that is within the
     /// character limit but over the size cap gets its own message, so the text never names a limit the value is under.
     /// </summary>
-    public bool CheckLength(string key, string subject, string value, int maxCharacters)
+    public bool TryAddLengthError(string key, string subject, string value, int maxCharacters)
     {
         switch (TextLength.Check(value, maxCharacters))
         {

@@ -32,10 +32,3 @@ public static class TextLength
         return info.LengthInTextElements <= ShortenedLength ? value : info.SubstringByTextElements(0, ShortenedLength) + "…";
     }
 }
-
-public enum TextLimit
-{
-    Within,
-    TooManyCharacters,
-    TooLarge,
-}

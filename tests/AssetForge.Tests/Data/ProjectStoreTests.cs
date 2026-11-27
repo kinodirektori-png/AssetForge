@@ -26,33 +26,33 @@ public sealed class ProjectStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task A_racing_slug_clash_is_a_conflict_that_does_not_blame_the_name()
+    public async Task A_racing_slug_clash_is_reported_as_a_slug_clash_not_a_name_clash()
     {
         using var scope = _factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
-        await store.AddAsync(NewProject("Dungeon!", "dungeon"), Ct);
+        Assert.Equal(AddResult.Added, await store.AddAsync(NewProject("Dungeon!", "dungeon"), Ct));
 
-        var ex = await Assert.ThrowsAsync<ConflictException>(() => store.AddAsync(NewProject("Dungeon?", "dungeon"), Ct));
+        var result = await store.AddAsync(NewProject("Dungeon?", "dungeon"), Ct);
 
-        Assert.Contains("Try again", ex.Message);
+        Assert.Equal(AddResult.SlugTaken, result);
     }
 
     [Fact]
-    public async Task The_unique_index_turns_a_racing_duplicate_name_into_a_conflict()
+    public async Task The_unique_index_reports_a_racing_duplicate_name()
     {
         using var scope = _factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
         await store.AddAsync(NewProject("Dungeon", "dungeon"), Ct);
 
         // Bypasses the service's pre-check, as a second request created at the same moment would.
-        var ex = await Assert.ThrowsAsync<ConflictException>(() => store.AddAsync(NewProject("dungeon", "dungeon-x"), Ct));
+        var result = await store.AddAsync(NewProject("dungeon", "dungeon-x"), Ct);
 
-        Assert.Contains("already exists", ex.Message);
+        Assert.Equal(AddResult.NameTaken, result);
         Assert.Equal(1, await ProjectCountAsync());
     }
 
     [Fact]
-    public async Task A_rejected_write_that_is_not_a_duplicate_is_not_reported_as_a_conflict()
+    public async Task A_rejected_write_that_is_not_a_duplicate_is_not_reported_as_a_clash()
     {
         using var scope = _factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();

@@ -7,7 +7,7 @@ namespace AssetForge.Tests.Unit;
 public sealed class ProjectNameValidatorTests
 {
     private static string[] NameErrors(string? name) =>
-        Assert.Throws<ValidationFailedException>(() => ProjectNameValidator.Validate(name)).Errors["name"];
+        Assert.Throws<ValidationFailedException>(() => ProjectNameValidator.Validate(name)).Errors["Name"];
 
     [Fact]
     public void A_name_is_trimmed_and_put_in_unicode_form_C()

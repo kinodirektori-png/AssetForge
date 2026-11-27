@@ -9,12 +9,15 @@ public static class ProjectNameValidator
     public static string Validate(string? name)
     {
         string clean = Project.Clean(name);
-        string key = ValidationErrors.Key(nameof(CreateProjectInput.Name));
+        string key = nameof(CreateProjectInput.Name);
         var errors = new ValidationErrors();
         if (clean.Length == 0)
             errors.Add(key, "Name is required.");
-        else if (!errors.CheckLength(key, "Name", clean, Project.MaxNameLength) && clean.Any(IsHiddenCharacter))
-            errors.Add(key, "Name must not contain control or invisible formatting characters.");
+        else if (!errors.TryAddLengthError(key, "Name", clean, Project.MaxNameLength))
+        {
+            if (clean.Any(IsHiddenCharacter))
+                errors.Add(key, "Name must not contain control or invisible formatting characters.");
+        }
         errors.ThrowIfAny();
         return clean;
     }
