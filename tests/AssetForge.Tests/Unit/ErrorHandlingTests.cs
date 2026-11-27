@@ -13,10 +13,11 @@ namespace AssetForge.Tests.Unit;
 public sealed class ErrorHandlingTests
 {
     private static async Task<(int Status, JsonElement Body)> Handle(
-        Exception exception, ILogger<AppExceptionHandler>? logger = null, JsonNamingPolicy? naming = null, bool useDefaultNaming = true)
+        Exception exception, ILogger<AppExceptionHandler>? logger = null, Action<JsonSerializerOptions>? configureJson = null)
     {
         var json = Options.Create(new Microsoft.AspNetCore.Http.Json.JsonOptions());
-        json.Value.SerializerOptions.PropertyNamingPolicy = useDefaultNaming ? JsonNamingPolicy.CamelCase : naming;
+        json.Value.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        configureJson?.Invoke(json.Value.SerializerOptions);
         var services = new ServiceCollection().AddLogging().AddProblemDetails().BuildServiceProvider();
         var context = new DefaultHttpContext { RequestServices = services };
         context.Response.Body = new MemoryStream();
@@ -45,8 +46,8 @@ public sealed class ErrorHandlingTests
         var errors = new Dictionary<string, string[]> { ["DetailLevel"] = ["a"], ["Palette[1]"] = ["b"] };
 
         var (_, camel) = await Handle(new ValidationFailedException(errors));
-        var (_, snake) = await Handle(new ValidationFailedException(errors), naming: JsonNamingPolicy.SnakeCaseLower, useDefaultNaming: false);
-        var (_, plain) = await Handle(new ValidationFailedException(errors), useDefaultNaming: false);
+        var (_, snake) = await Handle(new ValidationFailedException(errors), configureJson: o => o.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower);
+        var (_, plain) = await Handle(new ValidationFailedException(errors), configureJson: o => o.PropertyNamingPolicy = null);
 
         Assert.Equal(["detailLevel", "palette[1]"], camel.GetProperty("errors").EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(["detail_level", "palette[1]"], snake.GetProperty("errors").EnumerateObject().Select(p => p.Name).Order());

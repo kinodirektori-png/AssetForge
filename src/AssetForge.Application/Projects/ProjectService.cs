@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace AssetForge.Application.Projects;
 
 /// <summary>FR-1a projects and the FR-2 style guide.</summary>
@@ -19,7 +21,8 @@ public sealed class ProjectService(IProjectStore store, TimeProvider clock)
         {
             AddResult.Added => ToDto(project),
             AddResult.NameTaken => throw NameTaken(clean),
-            _ => throw new ConflictException("Another project was created at the same moment. Try again."),
+            AddResult.SlugTaken => throw new ConflictException("Another project was created at the same moment. Try again."),
+            var other => throw new UnreachableException($"Unhandled {nameof(AddResult)} {other}."),
         };
     }
 

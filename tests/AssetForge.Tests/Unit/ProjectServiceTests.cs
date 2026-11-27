@@ -12,13 +12,14 @@ public sealed class ProjectServiceTests
         public HashSet<string> Slugs { get; init; } = [];
         public bool SaveResult { get; init; } = true;
         public bool NameExists { get; init; }
+        public bool SlugsFail { get; init; }
         public AddResult AddResult { get; init; } = AddResult.Added;
 
         public Task<IReadOnlyList<Project>> ListAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<Project>>([]);
         public Task<Project?> FindAsync(Guid id, CancellationToken ct) => Task.FromResult<Project?>(null);
         public Task<bool> NameExistsAsync(string normalizedName, CancellationToken ct) => Task.FromResult(NameExists);
         public Task<IReadOnlyList<string>> SlugsStartingWithAsync(string prefix, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<string>>([.. Slugs]);
+            SlugsFail ? throw new InvalidOperationException("Slugs were looked up.") : Task.FromResult<IReadOnlyList<string>>([.. Slugs]);
         public Task<AddResult> AddAsync(Project project, CancellationToken ct) => Task.FromResult(AddResult);
         public Task<bool> SaveStyleGuideAsync(Guid projectId, StyleGuide styleGuide, CancellationToken ct) => Task.FromResult(SaveResult);
     }
@@ -43,7 +44,7 @@ public sealed class ProjectServiceTests
     [Fact]
     public async Task A_name_already_taken_is_a_conflict_before_any_slug_work()
     {
-        var service = new ProjectService(new FakeStore { NameExists = true }, new SteppingTimeProvider());
+        var service = new ProjectService(new FakeStore { NameExists = true, SlugsFail = true }, new SteppingTimeProvider());
 
         var ex = await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync("Dungeon", CancellationToken.None));
         Assert.Contains("already exists", ex.Message);
@@ -58,5 +59,13 @@ public sealed class ProjectServiceTests
 
         var ex = await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync("Dungeon", CancellationToken.None));
         Assert.Contains(expected, ex.Message);
+    }
+
+    [Fact]
+    public async Task A_result_the_service_does_not_know_is_a_bug_not_a_conflict()
+    {
+        var service = new ProjectService(new FakeStore { AddResult = (AddResult)99 }, new SteppingTimeProvider());
+
+        await Assert.ThrowsAsync<System.Diagnostics.UnreachableException>(() => service.CreateAsync("Dungeon", CancellationToken.None));
     }
 }

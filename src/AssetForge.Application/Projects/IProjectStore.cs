@@ -18,14 +18,3 @@ public interface IProjectStore
     /// <summary>Replaces the style guide of a project. Returns <c>false</c> if there is no such project.</summary>
     Task<bool> SaveStyleGuideAsync(Guid projectId, StyleGuide styleGuide, CancellationToken ct);
 }
-
-public enum AddResult
-{
-    Added,
-
-    /// <summary>Another project already has the name (compared ignoring case).</summary>
-    NameTaken,
-
-    /// <summary>Another project already has the slug. Happens only when two projects are created at the same moment.</summary>
-    SlugTaken,
-}
