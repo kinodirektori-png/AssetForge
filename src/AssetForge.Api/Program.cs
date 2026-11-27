@@ -57,6 +57,7 @@ app.MapOpenApi();
 app.MapScalarApiReference(options => options.DisableDefaultFonts());
 app.MapGet("/", () => Results.Redirect("/scalar/v1")).ExcludeFromDescription();
 app.MapStatus();
+app.MapProjects();
 
 app.Run();
 

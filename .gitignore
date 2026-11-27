@@ -1,6 +1,7 @@
 bin/
 obj/
-data/
+# Only a data folder at the root: on Windows git ignores case, and a bare data/ also hid src/*/Data/.
+/data/
 TestResults/
 *.db
 *.db-shm

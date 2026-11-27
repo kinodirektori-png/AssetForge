@@ -34,6 +34,23 @@ on Windows (`~/.local/share/AssetForge` on Linux). To use another folder, set `S
 database only, set `ConnectionStrings:AssetForge`. Either can go in user-secrets or an environment variable
 (`Storage__DataRoot`).
 
+## Database changes
+
+The database is migrated automatically when the app starts. After changing the EF Core model, add a migration with the
+`dotnet-ef` tool. Its version is pinned in `.config/dotnet-tools.json` to match the EF Core packages, so restore it once
+instead of installing it globally:
+
+```
+dotnet tool restore
+dotnet ef migrations add <Name> --project src/AssetForge.Infrastructure --output-dir Data/Migrations
+```
+
+Timestamps are stored as UTC text in ISO 8601 form (`DateTimeOffsetToUtcIsoStringConverter`), so the database can sort
+and filter by them. The converter is not recorded in migrations, so a change to it needs no migration but does change how
+new values are stored. Reading is lenient: a timestamp written in an earlier form (for example with a local offset) is
+still read correctly, so such a change does not require deleting the database. Values written before the change are
+not rewritten, so they may sort out of order against new ones.
+
 ## Tests
 
 ```

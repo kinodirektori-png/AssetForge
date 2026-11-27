@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AssetForge.Tests.Support;
 
-/// <summary>The real API with a temp SQLite file. Fakes for external calls are added by the feature issues.</summary>
+/// <summary>The real API with a temp SQLite file and a fake clock. Fakes for external calls are added by the feature issues.</summary>
 public sealed class ApiFactory : WebApplicationFactory<Program>
 {
     public const string Token = "test-token-0123456789-abcdefghijklmnop";
@@ -20,6 +20,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
     public string? TokenSetting { get; init; } = Token;
     public Dictionary<string, string?> Settings { get; } = [];
 
+    /// <summary>Replaces the system clock, so tests never depend on the real time.</summary>
+    public SteppingTimeProvider Clock { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         Directory.CreateDirectory(_dir);
@@ -29,7 +32,11 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         foreach (var (key, value) in Settings)
             builder.UseSetting(key, value);
 
-        builder.ConfigureTestServices(services => services.AddSingleton<IStartupFilter, TestRemoteIpStartupFilter>());
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<IStartupFilter, TestRemoteIpStartupFilter>();
+            services.AddSingleton<TimeProvider>(Clock);
+        });
     }
 
     /// <summary>A client that sends the API token, like the owner's Scalar session.</summary>

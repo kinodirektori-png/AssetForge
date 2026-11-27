@@ -1,0 +1,50 @@
+using AssetForge.Application.Projects;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+
+namespace AssetForge.Infrastructure.Data;
+
+public sealed class ProjectStore(AppDbContext db) : IProjectStore
+{
+    /// <summary>SQLITE_CONSTRAINT_UNIQUE: a unique index refused the row. Other constraint failures are not conflicts.</summary>
+    private const int UniqueConstraintFailed = 2067;
+
+    public async Task<IReadOnlyList<Project>> ListAsync(CancellationToken ct) =>
+        await db.Projects.AsNoTracking().OrderBy(p => p.CreatedAt).ThenBy(p => p.Id).ToListAsync(ct);
+
+    public Task<Project?> FindAsync(Guid id, CancellationToken ct) =>
+        db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
+
+    public Task<bool> NameExistsAsync(string normalizedName, CancellationToken ct) =>
+        db.Projects.AnyAsync(p => p.NormalizedName == normalizedName, ct);
+
+    public async Task<IReadOnlyList<string>> SlugsStartingWithAsync(string prefix, CancellationToken ct) =>
+        await db.Projects.Where(p => p.Slug.StartsWith(prefix)).Select(p => p.Slug).ToListAsync(ct);
+
+    public async Task<AddResult> AddAsync(Project project, CancellationToken ct)
+    {
+        db.Projects.Add(project);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return AddResult.Added;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteExtendedErrorCode: UniqueConstraintFailed })
+        {
+            // A project created at the same moment took the name or the slug. Ask the database which one,
+            // instead of reading SQLite's error text.
+            db.Entry(project).State = EntityState.Detached;
+            return await NameExistsAsync(project.NormalizedName, ct) ? AddResult.NameTaken : AddResult.SlugTaken;
+        }
+    }
+
+    public async Task<bool> SaveStyleGuideAsync(Guid projectId, StyleGuide styleGuide, CancellationToken ct)
+    {
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, ct);
+        if (project is null)
+            return false;
+        project.StyleGuide = styleGuide;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+}
