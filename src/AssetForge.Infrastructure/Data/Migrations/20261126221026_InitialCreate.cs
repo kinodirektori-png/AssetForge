@@ -16,8 +16,8 @@ namespace AssetForge.Infrastructure.Data.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 50, nullable: false),
-                    NormalizedName = table.Column<string>(type: "TEXT", maxLength: 50, nullable: false),
+                    Name = table.Column<string>(type: "TEXT", nullable: false),
+                    NormalizedName = table.Column<string>(type: "TEXT", nullable: false),
                     Slug = table.Column<string>(type: "TEXT", maxLength: 30, nullable: false),
                     CreatedAt = table.Column<string>(type: "TEXT", nullable: false),
                     StyleGuide_Description = table.Column<string>(type: "TEXT", maxLength: 300, nullable: true),
@@ -27,7 +27,7 @@ namespace AssetForge.Infrastructure.Data.Migrations
                     StyleGuide_Outline = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
                     StyleGuide_DetailLevel = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
                     StyleGuide_Avoid = table.Column<string>(type: "TEXT", nullable: false),
-                    StyleGuide_UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true)
+                    StyleGuide_UpdatedAt = table.Column<string>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {

@@ -17,8 +17,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         b.Entity<Project>(e =>
         {
             e.HasKey(p => p.Id);
-            e.Property(p => p.Name).HasMaxLength(Project.MaxNameLength);
-            e.Property(p => p.NormalizedName).HasMaxLength(Project.MaxNameLength);
             e.HasIndex(p => p.NormalizedName).IsUnique();
             e.Property(p => p.Slug).HasMaxLength(Slugs.MaxLength);
             e.HasIndex(p => p.Slug).IsUnique();

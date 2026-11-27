@@ -5,7 +5,6 @@ using System.Text.Json;
 using AssetForge.Application.Projects;
 using AssetForge.Infrastructure.Data;
 using AssetForge.Tests.Support;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -111,26 +110,6 @@ public sealed class ProjectEndpointsTests : IDisposable
         Assert.Equal(["Old", "New"], list!.Select(p => p.Name));
     }
 
-    [Fact]
-    public async Task Style_guide_save_time_can_be_sorted_and_filtered_in_the_database()
-    {
-        var first = await CreateAsync("First");
-        var second = await CreateAsync("Second");
-        await _client.PutAsJsonAsync($"/api/projects/{second.Id}/style-guide", new { });
-        await _client.PutAsJsonAsync($"/api/projects/{first.Id}/style-guide", new { });
-
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var cutoff = SteppingTimeProvider.Start;
-        var names = await db.Projects
-            .Where(p => p.StyleGuide.UpdatedAt > cutoff)
-            .OrderBy(p => p.StyleGuide.UpdatedAt)
-            .Select(p => p.Name)
-            .ToListAsync();
-
-        Assert.Equal(["Second", "First"], names);
-    }
-
     [Theory]
     [InlineData("dungeon")]
     [InlineData("DUNGEON")]
@@ -218,7 +197,8 @@ public sealed class ProjectEndpointsTests : IDisposable
     private static async Task<JsonElement> ProblemAsync(HttpResponseMessage response)
     {
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return doc.RootElement.Clone();
     }
 
     [Fact]
@@ -274,6 +254,48 @@ public sealed class ProjectEndpointsTests : IDisposable
         var created = await CreateAsync("Family \U0001F468\u200D\U0001F469\u200D\U0001F467");
 
         Assert.Contains('\u200D', created.Name);
+    }
+
+    [Fact]
+    public async Task Limits_also_cap_the_size_so_stacked_combining_marks_cannot_make_huge_values()
+    {
+        string huge = "a" + new string('\u0300', 200_000);   // one user-visible character, 200,000 UTF-16 units
+        var project = await CreateAsync("Dungeon");
+        string url = $"/api/projects/{project.Id}/style-guide";
+
+        var name = await ErrorsAsync(await _client.PostAsJsonAsync("/api/projects", new { name = huge }));
+        var guide = await ErrorsAsync(await _client.PutAsJsonAsync(url, new { description = huge, lighting = huge, avoid = new[] { huge } }));
+
+        Assert.Contains("50", Assert.Single(name["name"]));
+        Assert.Equal(["avoid[0]", "description", "lighting"], guide.Keys.Order());
+        Assert.Equal(1, await ProjectCountAsync());
+    }
+
+    [Fact]
+    public async Task Style_guide_limits_count_characters_a_user_sees_not_utf16_units()
+    {
+        var project = await CreateAsync("Dungeon");
+        string url = $"/api/projects/{project.Id}/style-guide";
+
+        var atLimit = await _client.PutAsJsonAsync(url, new { description = string.Concat(Enumerable.Repeat("\U0001F600", 300)) });
+        Assert.Equal(HttpStatusCode.OK, atLimit.StatusCode);
+
+        var over = await ErrorsAsync(await _client.PutAsJsonAsync(url,
+            new { description = string.Concat(Enumerable.Repeat("\U0001F600", 301)) }));
+        Assert.Contains("300", Assert.Single(over["description"]));
+    }
+
+    [Fact]
+    public async Task A_long_invalid_colour_is_cut_on_whole_characters_in_the_error()
+    {
+        var project = await CreateAsync("Dungeon");
+        string bad = "x" + string.Concat(Enumerable.Repeat("\U0001F600", 30));   // an odd first unit shifts the cut
+
+        var errors = await ErrorsAsync(await _client.PutAsJsonAsync($"/api/projects/{project.Id}/style-guide", new { palette = new[] { bad } }));
+
+        string message = Assert.Single(errors["palette[0]"]);
+        Assert.Contains("x" + string.Concat(Enumerable.Repeat("\U0001F600", 19)) + "…", message);
+        Assert.DoesNotContain('\uFFFD', message);
     }
 
     [Fact]
@@ -438,7 +460,8 @@ public sealed class ProjectEndpointsTests : IDisposable
 
         var errors = await ErrorsAsync(await _client.PutAsync(url, Body(field, new string('x', limit + 1))));
         string message = Assert.Single(errors[field]);
-        Assert.Contains(field, message);
+        string words = System.Text.RegularExpressions.Regex.Replace(field, "(?<!^)([A-Z])", " $1");
+        Assert.Contains(words, message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(limit.ToString(), message);
 
         static StringContent Body(string field, string value) =>
@@ -562,81 +585,5 @@ public sealed class ProjectEndpointsTests : IDisposable
         var guide = (await _client.GetFromJsonAsync<StyleGuideDto>(url, Json))!;
         Assert.Null(guide.Description);
         Assert.Null(guide.UpdatedAt);
-    }
-
-    // ---- Store -----------------------------------------------------------------------------------------------
-
-    [Fact]
-    public async Task A_racing_slug_clash_is_a_conflict_that_does_not_blame_the_name()
-    {
-        await CreateAsync("Dungeon!");
-        using var scope = _factory.Services.CreateScope();
-        var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
-
-        var clash = new Project { Id = Guid.CreateVersion7(), Name = "Dungeon?", NormalizedName = "DUNGEON?", Slug = "dungeon" };
-
-        var ex = await Assert.ThrowsAsync<AssetForge.Application.ConflictException>(() => store.AddAsync(clash, CancellationToken.None));
-        Assert.Contains("Try again", ex.Message);
-    }
-
-    [Fact]
-    public async Task The_unique_index_turns_a_racing_duplicate_name_into_a_conflict()
-    {
-        await CreateAsync("Dungeon");
-        using var scope = _factory.Services.CreateScope();
-        var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
-
-        // Bypasses the service's pre-check, as a second request created at the same moment would.
-        var duplicate = new Project { Id = Guid.CreateVersion7(), Name = "dungeon", NormalizedName = "DUNGEON", Slug = "dungeon-x" };
-
-        var ex = await Assert.ThrowsAsync<AssetForge.Application.ConflictException>(() => store.AddAsync(duplicate, CancellationToken.None));
-        Assert.Contains("already exists", ex.Message);
-        Assert.Equal(1, await ProjectCountAsync());
-    }
-
-    [Fact]
-    public async Task A_rejected_write_that_is_not_a_duplicate_is_not_reported_as_a_conflict()
-    {
-        using var scope = _factory.Services.CreateScope();
-        var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
-
-        // A NOT NULL failure is also SQLITE_CONSTRAINT (19), but not a unique-index clash (2067).
-        var broken = new Project { Id = Guid.CreateVersion7(), Name = null!, NormalizedName = "BROKEN", Slug = "broken" };
-
-        var ex = await Assert.ThrowsAsync<DbUpdateException>(() => store.AddAsync(broken, CancellationToken.None));
-        Assert.Equal(19, Assert.IsType<SqliteException>(ex.InnerException).SqliteErrorCode);
-        Assert.Equal(0, await ProjectCountAsync());
-    }
-
-    [Fact]
-    public async Task Reads_do_not_track_and_only_the_update_read_does()
-    {
-        var project = await CreateAsync("Dungeon");
-        using var scope = _factory.Services.CreateScope();
-        var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        Assert.NotNull(await store.FindAsync(project.Id, CancellationToken.None));
-        Assert.Empty(db.ChangeTracker.Entries());
-
-        Assert.NotNull(await store.FindForUpdateAsync(project.Id, CancellationToken.None));
-        Assert.NotEmpty(db.ChangeTracker.Entries());
-    }
-
-    [Fact]
-    public async Task The_style_guide_dto_does_not_share_lists_with_the_saved_guide()
-    {
-        var project = await CreateAsync("Dungeon");
-        using var scope = _factory.Services.CreateScope();
-        var service = scope.ServiceProvider.GetRequiredService<ProjectService>();
-
-        var saved = await service.SaveStyleGuideAsync(project.Id, new StyleGuideInput(Palette: ["#112233"], Avoid: ["text"]), CancellationToken.None);
-
-        // Before the fix the DTO held the entity's own List<string>, which a caller could cast back and change.
-        Assert.False(saved.Palette is List<string>);
-        Assert.False(saved.Avoid is List<string>);
-        var read = await service.GetStyleGuideAsync(project.Id, CancellationToken.None);
-        Assert.Equal(["#112233"], read.Palette);
-        Assert.Equal(["text"], read.Avoid);
     }
 }

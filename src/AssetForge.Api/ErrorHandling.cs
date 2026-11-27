@@ -14,7 +14,7 @@ public sealed class AppExceptionHandler(ILogger<AppExceptionHandler> logger) : I
             // The title is the same every time an error of this kind happens (RFC 9457); the specific text goes in detail.
             NotFoundException n => Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Not found", detail: n.Message),
             ConflictException c => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Conflict", detail: c.Message),
-            BadHttpRequestException bad => Results.Problem(statusCode: bad.StatusCode, title: "The request is invalid."),
+            BadHttpRequestException bad => Results.Problem(statusCode: bad.StatusCode, title: "The request is invalid"),
             _ => Unexpected(exception),
         };
         await result.ExecuteAsync(context);

@@ -16,9 +16,6 @@ public sealed class ProjectStore(AppDbContext db) : IProjectStore
     public Task<Project?> FindAsync(Guid id, CancellationToken ct) =>
         db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
 
-    public Task<Project?> FindForUpdateAsync(Guid id, CancellationToken ct) =>
-        db.Projects.FirstOrDefaultAsync(p => p.Id == id, ct);
-
     public Task<bool> NameExistsAsync(string normalizedName, CancellationToken ct) =>
         db.Projects.AnyAsync(p => p.NormalizedName == normalizedName, ct);
 
@@ -43,8 +40,9 @@ public sealed class ProjectStore(AppDbContext db) : IProjectStore
         }
     }
 
-    public async Task SaveStyleGuideAsync(Project project, StyleGuide styleGuide, CancellationToken ct)
+    public async Task SaveStyleGuideAsync(Guid projectId, StyleGuide styleGuide, CancellationToken ct)
     {
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, ct) ?? throw new NotFoundException("The project");
         project.StyleGuide = styleGuide;
         await db.SaveChangesAsync(ct);
     }

@@ -32,12 +32,10 @@ namespace AssetForge.Infrastructure.Data.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(50)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("NormalizedName")
                         .IsRequired()
-                        .HasMaxLength(50)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Slug")
@@ -91,7 +89,7 @@ namespace AssetForge.Infrastructure.Data.Migrations
                                 .HasMaxLength(100)
                                 .HasColumnType("TEXT");
 
-                            b1.Property<DateTimeOffset?>("UpdatedAt")
+                            b1.Property<string>("UpdatedAt")
                                 .HasColumnType("TEXT");
 
                             b1.HasKey("ProjectId");

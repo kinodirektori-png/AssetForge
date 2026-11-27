@@ -31,9 +31,9 @@ public sealed class SlugsTests
     [Fact]
     public void A_taken_slug_gets_the_next_free_number()
     {
-        Assert.Equal("dungeon", Slugs.MakeUnique("dungeon", []));
-        Assert.Equal("dungeon-2", Slugs.MakeUnique("dungeon", ["dungeon"]));
-        Assert.Equal("dungeon-4", Slugs.MakeUnique("dungeon", ["dungeon", "dungeon-2", "dungeon-3"]));
+        Assert.Equal("dungeon", Slugs.MakeUnique("dungeon", new HashSet<string>()));
+        Assert.Equal("dungeon-2", Slugs.MakeUnique("dungeon", new HashSet<string> { "dungeon" }));
+        Assert.Equal("dungeon-4", Slugs.MakeUnique("dungeon", new HashSet<string> { "dungeon", "dungeon-2", "dungeon-3" }));
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public sealed class SlugsTests
     {
         string full = new string('a', Slugs.MaxLength);
 
-        string unique = Slugs.MakeUnique(full, [full]);
+        string unique = Slugs.MakeUnique(full, new HashSet<string> { full });
 
         Assert.Equal(new string('a', Slugs.MaxLength - 2) + "-2", unique);
     }
@@ -52,9 +52,18 @@ public sealed class SlugsTests
         string full = new('a', Slugs.MaxLength);
         string prefix = Slugs.SharedPrefix(full);
 
-        Assert.StartsWith(prefix, Slugs.MakeUnique(full, [full]));
-        Assert.StartsWith(prefix, new string('a', Slugs.MaxLength - 5) + "-9999");
+        Assert.StartsWith(prefix, Slugs.MakeUnique(full, new HashSet<string> { full }));
+        Assert.StartsWith(prefix, new string('a', Slugs.MaxLength - Slugs.MaxSuffixLength) + "-9999");
         Assert.Equal(new string('b', 24), Slugs.SharedPrefix(new string('b', 24) + "-" + new string('c', 10)));
         Assert.Equal("short", Slugs.SharedPrefix("short"));
+    }
+
+    [Fact]
+    public void Giving_up_after_9999_variants_is_a_conflict_not_an_endless_loop()
+    {
+        var taken = Enumerable.Range(2, 9998).Select(n => $"dungeon-{n}").Append("dungeon").ToHashSet();
+
+        Assert.Throws<AssetForge.Application.ConflictException>(() => Slugs.MakeUnique("dungeon", taken));
+        Assert.Equal("dungeon-9999", Slugs.MakeUnique("dungeon", taken.Where(t => t != "dungeon-9999").ToHashSet()));
     }
 }

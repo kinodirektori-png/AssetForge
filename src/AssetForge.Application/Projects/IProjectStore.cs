@@ -8,9 +8,6 @@ public interface IProjectStore
     /// <summary>Reads a project without tracking it. Changes to the result are not saved.</summary>
     Task<Project?> FindAsync(Guid id, CancellationToken ct);
 
-    /// <summary>Reads a project for <see cref="SaveStyleGuideAsync"/>, which saves changes made to it.</summary>
-    Task<Project?> FindForUpdateAsync(Guid id, CancellationToken ct);
-
     Task<bool> NameExistsAsync(string normalizedName, CancellationToken ct);
 
     Task<IReadOnlyList<string>> SlugsStartingWithAsync(string prefix, CancellationToken ct);
@@ -18,5 +15,6 @@ public interface IProjectStore
     /// <summary>Adds the project. Throws <see cref="ConflictException"/> if its name is already taken.</summary>
     Task AddAsync(Project project, CancellationToken ct);
 
-    Task SaveStyleGuideAsync(Project project, StyleGuide styleGuide, CancellationToken ct);
+    /// <summary>Replaces the style guide of a project. Throws <see cref="NotFoundException"/> if there is no such project.</summary>
+    Task SaveStyleGuideAsync(Guid projectId, StyleGuide styleGuide, CancellationToken ct);
 }
